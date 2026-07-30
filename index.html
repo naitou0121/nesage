@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<title>値下げスター</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<style>
+:root{
+  --bg:#f2f2f7; --card:#ffffff; --text:#1c1c1e; --text2:#6e6e73; --text3:#aeaeb2;
+  --accent:#0a7aff; --accent-bg:rgba(10,122,255,.10);
+  --sep:rgba(60,60,67,.12);
+  --amber:#b45309; --amber-bg:#fdf0d5;
+  --red:#d02b20; --red-bg:#fdeae8;
+  --green:#1f8a3b; --green-bg:#e8f6ec;
+  --chrome:rgba(249,249,251,.78);
+  --danger:#ff3b30;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#000000; --card:#1c1c1e; --text:#f2f2f7; --text2:#98989f; --text3:#636369;
+    --accent:#0a84ff; --accent-bg:rgba(10,132,255,.16);
+    --sep:rgba(84,84,88,.5);
+    --amber:#ffb340; --amber-bg:rgba(255,159,10,.16);
+    --red:#ff6961; --red-bg:rgba(255,69,58,.16);
+    --green:#4cd964; --green-bg:rgba(48,209,88,.16);
+    --chrome:rgba(18,18,20,.78);
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{font:100%/1.5 system-ui,-apple-system,"Hiragino Sans",sans-serif}
+body{background:var(--bg);color:var(--text);padding-bottom:env(safe-area-inset-bottom)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;touch-action:manipulation}
+input{font:inherit}
+
+/* ---------- ヘッダー（半透明マテリアル） ---------- */
+header{
+  position:sticky;top:0;z-index:20;
+  background:var(--chrome);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%);
+  border-bottom:1px solid var(--sep);
+  padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;
+}
+.hrow{display:flex;align-items:center;gap:8px}
+h1{font-size:1.06rem;font-weight:700;letter-spacing:-0.01em;flex:1}
+.hbtn{
+  min-height:36px;padding:6px 13px;border-radius:999px;font-size:.88rem;font-weight:600;
+  background:var(--accent-bg);color:var(--accent);
+  transition:transform .1s ease-out,opacity .1s;position:relative;
+}
+.hbtn:active{transform:scale(.95)}
+.hbtn:disabled{opacity:.35}
+.badge{
+  position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;
+  background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;line-height:19px;text-align:center;
+}
+.filemeta{font-size:.72rem;color:var(--text2);margin-top:4px;min-height:1em}
+
+/* ---------- コントロール ---------- */
+.controls{padding:10px 14px 4px;display:flex;flex-direction:column;gap:8px}
+.seg{
+  display:flex;background:rgba(120,120,128,.16);border-radius:9px;padding:2px;
+}
+.seg button{
+  flex:1;min-height:32px;border-radius:7px;font-size:.85rem;font-weight:600;color:var(--text2);
+  transition:transform .1s ease-out;
+}
+.seg button:active{transform:scale(.97)}
+.seg button.on{background:var(--card);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.chiprow{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+.chiprow::-webkit-scrollbar{display:none}
+.chip{
+  flex-shrink:0;min-height:32px;padding:5px 13px;border-radius:999px;font-size:.83rem;font-weight:600;
+  background:var(--card);color:var(--text2);border:1px solid var(--sep);
+  transition:transform .1s ease-out;
+}
+.chip:active{transform:scale(.95)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.searchwrap{position:relative}
+.search{
+  width:100%;min-height:36px;padding:7px 12px 7px 32px;border-radius:10px;border:none;
+  background:rgba(120,120,128,.12);color:var(--text);font-size:16px;outline:none;
+}
+.searchwrap::before{
+  content:"🔍";position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:.8rem;opacity:.5;
+}
+.stats{font-size:.76rem;color:var(--text2);padding:0 2px}
+
+/* ---------- カード ---------- */
+#list{padding:8px 12px 90px;display:flex;flex-direction:column;gap:9px}
+.card{
+  background:var(--card);border-radius:14px;padding:12px 13px 11px;
+  box-shadow:0 1px 2px rgba(0,0,0,.05);
+}
+.card.changed{outline:2px solid var(--accent);outline-offset:-2px}
+.crow1{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px}
+.cond{
+  font-size:.7rem;font-weight:700;padding:2.5px 8px;border-radius:6px;
+  background:rgba(120,120,128,.14);color:var(--text2);
+}
+.cond.collector{background:var(--amber-bg);color:var(--amber)}
+.cond.new{background:var(--green-bg);color:var(--green)}
+.cdate{font-size:.73rem;color:var(--text2);margin-left:auto}
+.cdate .days{font-weight:700}
+.cdate .days.old{color:var(--red)}
+.ctitle{
+  font-size:.92rem;font-weight:600;line-height:1.35;letter-spacing:-0.005em;margin-bottom:8px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.prices{display:flex;align-items:stretch;gap:8px;margin-bottom:8px}
+.pbox{flex:1;border-radius:10px;padding:7px 10px;background:rgba(120,120,128,.08);text-align:left}
+.plabel{font-size:.68rem;color:var(--text2);font-weight:600}
+.pval{font-size:1.13rem;font-weight:700;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.pbox.akaji{
+  background:var(--accent-bg);position:relative;text-align:left;
+  transition:transform .1s ease-out;
+}
+.pbox.akaji:active{transform:scale(.96)}
+.pbox.akaji .plabel{color:var(--accent)}
+.pbox.akaji .plabel::after{content:"　出品一覧 ›";font-weight:700}
+.pval .arrow{color:var(--accent);font-weight:800}
+.pval .newv{color:var(--accent)}
+.crow3{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tag{font-size:.7rem;font-weight:600;padding:2.5px 8px;border-radius:6px;background:rgba(120,120,128,.12);color:var(--text2)}
+.tag.stuck{background:var(--red-bg);color:var(--red)}
+.profit{font-size:.73rem;color:var(--text2);font-variant-numeric:tabular-nums}
+.profit b{color:var(--green)}
+.profit b.minus{color:var(--red)}
+.actions{display:flex;gap:7px;margin-top:9px}
+.abtn{
+  flex:1;min-height:38px;border-radius:10px;font-size:.9rem;font-weight:700;
+  background:rgba(120,120,128,.12);color:var(--accent);
+  transition:transform .1s ease-out,background .15s;
+}
+.abtn:active{transform:scale(.95);background:rgba(120,120,128,.22)}
+.abtn.undo{color:var(--danger)}
+.abtn.keepa{flex:0 0 auto;padding:0 13px;color:var(--text2);font-weight:600;font-size:.8rem}
+.editrow{display:flex;gap:7px;margin-top:9px}
+.editrow input{
+  flex:1;min-width:0;min-height:38px;border-radius:10px;border:1.5px solid var(--accent);
+  padding:0 12px;font-size:16px;background:var(--card);color:var(--text);outline:none;
+  font-variant-numeric:tabular-nums;
+}
+.editrow .abtn{flex:0 0 auto;padding:0 16px}
+.editrow .abtn.ok{background:var(--accent);color:#fff}
+
+/* ---------- 空状態・その他 ---------- */
+.empty{padding:56px 28px;text-align:center;color:var(--text2);font-size:.9rem;line-height:1.9}
+.empty .big{font-size:2.2rem;display:block;margin-bottom:8px}
+#moreSentinel{height:1px}
+.toast{
+  position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 24px);transform:translateX(-50%) translateY(20px);
+  background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:.85rem;font-weight:600;
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s cubic-bezier(.2,.8,.3,1);z-index:50;
+  max-width:86vw;text-align:center;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------- 書き出しシート ---------- */
+.sheetback{
+  position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:30;opacity:0;pointer-events:none;transition:opacity .25s;
+}
+.sheetback.show{opacity:1;pointer-events:auto}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:31;
+  background:var(--card);border-radius:18px 18px 0 0;
+  padding:10px 18px calc(env(safe-area-inset-bottom) + 18px);
+  transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.9,.3,1);
+}
+.sheet.show{transform:translateY(0)}
+.grabber{width:38px;height:5px;border-radius:3px;background:rgba(120,120,128,.3);margin:0 auto 14px}
+.sheet h2{font-size:1rem;font-weight:700;margin-bottom:6px}
+.sheet p{font-size:.83rem;color:var(--text2);line-height:1.7;margin-bottom:14px}
+.sheetbtn{
+  width:100%;min-height:48px;border-radius:12px;font-size:.95rem;font-weight:700;margin-bottom:9px;
+  background:var(--accent);color:#fff;transition:transform .1s ease-out;
+}
+.sheetbtn:active{transform:scale(.97)}
+.sheetbtn.sub{background:rgba(120,120,128,.12);color:var(--text)}
+.sheetbtn.warn{background:rgba(120,120,128,.12);color:var(--danger)}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <h1>値下げスター</h1>
+    <button class="hbtn" id="importBtn">CSV読込</button>
+    <button class="hbtn" id="exportBtn" disabled>書き出し<span class="badge" id="chgBadge" hidden>0</span></button>
+  </div>
+  <div class="filemeta" id="fileMeta"></div>
+</header>
+
+<div class="controls" id="controls" hidden>
+  <div class="seg" id="segCond">
+    <button data-v="all" class="on">すべて</button>
+    <button data-v="collector">コレクター</button>
+    <button data-v="used">中古</button>
+  </div>
+  <div class="chiprow">
+    <button class="chip on" id="sortChip" data-mode="new">新しい順</button>
+    <button class="chip" id="stuckChip">下限張り付き</button>
+    <button class="chip" id="changedChip">変更のみ</button>
+  </div>
+  <div class="searchwrap"><input class="search" id="search" type="search" placeholder="タイトル・SKUで検索" autocomplete="off"></div>
+  <div class="stats" id="stats"></div>
+</div>
+
+<div id="list">
+  <div class="empty" id="emptyMsg">
+    <span class="big">📦</span>
+    プライスターの<b>「CSVで一括変更」→ダウンロード</b>した<br>
+    editUploadProduct_FBA.csv を読み込んでください。<br><br>
+    右上の「CSV読込」から選択できます。<br>
+    データはこの端末の中だけに保存されます。
+  </div>
+</div>
+<div id="moreSentinel"></div>
+
+<div class="toast" id="toast"></div>
+
+<div class="sheetback" id="sheetBack"></div>
+<div class="sheet" id="sheet">
+  <div class="grabber"></div>
+  <h2>変更をCSVに書き出す</h2>
+  <p id="sheetDesc"></p>
+  <button class="sheetbtn" id="doExport">CSVを書き出す（共有 / 保存）</button>
+  <button class="sheetbtn warn" id="clearChanges">変更をすべて取り消す</button>
+  <button class="sheetbtn sub" id="closeSheet">閉じる</button>
+</div>
+
+<input type="file" id="fileInput" accept=".csv,text/csv" hidden>
+
+<script src="./csv-core.js"></script>
+<script>
+(function(){
+'use strict';
+var CORE = window.CSVCore;
+
+/* ---------- 状態 ---------- */
+var fileBytes = null;      // Uint8Array（元CSVそのまま）
+var fileName = '';
+var importedAt = 0;
+var parsed = null;         // CORE.parseFile の結果
+var changes = {};          // { sku: newAkaji }
+var filterCond = 'all';    // all | collector | used
+var sortMode = 'new';      // new | old | priceHigh | priceLow
+var onlyStuck = false;
+var onlyChanged = false;
+var query = '';
+var visibleItems = [];
+var renderedCount = 0;
+var CHUNK = 50;
+
+var $ = function(id){ return document.getElementById(id); };
+
+/* ---------- 永続化 ---------- */
+var LS_CHANGES = 'nesage-changes';
+function loadChanges(){
+  try{ changes = JSON.parse(localStorage.getItem(LS_CHANGES) || '{}'); }catch(e){ changes = {}; }
+}
+function saveChanges(){ localStorage.setItem(LS_CHANGES, JSON.stringify(changes)); }
+
+function idb(){
+  return new Promise(function(res, rej){
+    var r = indexedDB.open('nesage', 1);
+    r.onupgradeneeded = function(){ r.result.createObjectStore('kv'); };
+    r.onsuccess = function(){ res(r.result); };
+    r.onerror = function(){ rej(r.error); };
+  });
+}
+function idbPut(key, val){
+  return idb().then(function(db){
+    return new Promise(function(res, rej){
+      var tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(val, key);
+      tx.oncomplete = res; tx.onerror = function(){ rej(tx.error); };
+    });
+  });
+}
+function idbGet(key){
+  return idb().then(function(db){
+    return new Promise(function(res, rej){
+      var tx = db.transaction('kv', 'readonly');
+      var q = tx.objectStore('kv').get(key);
+      q.onsuccess = function(){ res(q.result); };
+      q.onerror = function(){ rej(q.error); };
+    });
+  });
+}
+
+/* ---------- ユーティリティ ---------- */
+function yen(n){ return '¥' + Number(n).toLocaleString('ja-JP'); }
+function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function daysSince(dateStr){
+  if(!dateStr) return null;
+  var d = new Date(+dateStr.slice(0,4), +dateStr.slice(4,6)-1, +dateStr.slice(6,8));
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+var toastTimer = null;
+function toast(msg){
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2200);
+}
+
+/* ---------- 読み込み ---------- */
+$('importBtn').addEventListener('click', function(){ $('fileInput').click(); });
+$('fileInput').addEventListener('change', function(){
+  var f = this.files[0];
+  this.value = '';
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var u8 = new Uint8Array(reader.result);
+      var p = CORE.parseFile(u8);
+      fileBytes = u8; fileName = f.name; importedAt = Date.now(); parsed = p;
+      idbPut('file', { bytes: u8, name: f.name, at: importedAt });
+      // 現CSVに存在しないSKUの変更は自動で落とす
+      var known = {};
+      p.items.forEach(function(it){ known[it.sku] = 1; });
+      var dropped = 0;
+      Object.keys(changes).forEach(function(sku){ if(!known[sku]){ delete changes[sku]; dropped++; } });
+      if(dropped) saveChanges();
+      toast(p.items.length + '件 読み込みました' + (dropped ? '（対象外の変更' + dropped + '件は削除）' : ''));
+      refresh();
+    }catch(e){
+      toast('読み込み失敗：' + e.message);
+    }
+  };
+  reader.readAsArrayBuffer(f);
+});
+
+/* ---------- フィルタ・ソート ---------- */
+$('segCond').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(!b) return;
+  filterCond = b.dataset.v;
+  this.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  refresh();
+});
+var SORTS = [
+  ['new', '新しい順'], ['old', '古い順'], ['priceHigh', '価格が高い順'], ['priceLow', '価格が安い順']
+];
+$('sortChip').addEventListener('click', function(){
+  var i = SORTS.findIndex(function(s){ return s[0] === sortMode; });
+  var next = SORTS[(i + 1) % SORTS.length];
+  sortMode = next[0];
+  this.textContent = next[1];
+  refresh();
+});
+$('stuckChip').addEventListener('click', function(){
+  onlyStuck = !onlyStuck;
+  this.classList.toggle('on', onlyStuck);
+  refresh();
+});
+$('changedChip').addEventListener('click', function(){
+  onlyChanged = !onlyChanged;
+  this.classList.toggle('on', onlyChanged);
+  refresh();
+});
+var searchTimer = null;
+$('search').addEventListener('input', function(){
+  var v = this.value;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(function(){ query = v.trim().toLowerCase(); refresh(); }, 200);
+});
+
+/* ---------- 一覧描画 ---------- */
+function computeVisible(){
+  if(!parsed) return [];
+  var items = parsed.items.filter(function(it){
+    if(filterCond === 'collector' && !CORE.isCollector(it.condition)) return false;
+    if(filterCond === 'used' && CORE.isCollector(it.condition)) return false;
+    if(onlyStuck && it.price !== it.akaji) return false;
+    if(onlyChanged && !(it.sku in changes)) return false;
+    if(query){
+      var hay = (it.title + ' ' + it.sku + ' ' + it.asin).toLowerCase();
+      if(hay.indexOf(query) === -1) return false;
+    }
+    return true;
+  });
+  items.sort(function(a, b){
+    if(sortMode === 'priceHigh') return b.price - a.price;
+    if(sortMode === 'priceLow') return a.price - b.price;
+    var da = a.dateStr || '00000000', db2 = b.dateStr || '00000000';
+    if(sortMode === 'old'){
+      if(da === db2) return a.sku < b.sku ? -1 : 1;
+      if(da === '00000000') return 1;
+      if(db2 === '00000000') return -1;
+      return da < db2 ? -1 : 1;
+    }
+    if(da === db2) return a.sku < b.sku ? -1 : 1;
+    return da > db2 ? -1 : 1; // new: 日付降順・日付不明は末尾
+  });
+  return items;
+}
+
+function pendingValue(it){
+  var c = changes[it.sku];
+  if(!c) return null;
+  var t = CORE.targetField(it);
+  return (c[t] != null) ? c[t] : null;
+}
+
+function cardHTML(it){
+  var isCol = CORE.isCollector(it.condition);
+  var condLabel = CORE.CONDITION_LABEL[it.condition] || ('状態' + it.condition);
+  var condCls = isCol ? 'collector' : (condLabel === '新品' ? 'new' : '');
+  var days = daysSince(it.dateStr);
+  var dateHtml = '';
+  if(it.dateStr){
+    var dstr = (+it.dateStr.slice(4,6)) + '/' + (+it.dateStr.slice(6,8));
+    if(+it.dateStr.slice(0,4) !== new Date().getFullYear()) dstr = it.dateStr.slice(0,4) + '/' + dstr;
+    dateHtml = '<span class="cdate">' + dstr + '仕入 · <span class="days' + (days >= 60 ? ' old' : '') + '">' + days + '日</span></span>';
+  } else {
+    dateHtml = '<span class="cdate">仕入日不明</span>';
+  }
+  var target = CORE.targetField(it);       // 'price'（直値下げ）| 'akaji'（最低価格）
+  var pending = pendingValue(it);
+  var valHtml = function(orig){
+    return (pending != null)
+      ? '<span class="pval">' + yen(orig) + '<span class="arrow"> → </span><span class="newv">' + yen(pending) + '</span></span>'
+      : '<span class="pval">' + yen(orig) + '</span>';
+  };
+  var priceBox, akajiBox;
+  if(target === 'price'){
+    priceBox = '<button class="pbox akaji" data-act="offers"><div class="plabel">販売価格</div>' + valHtml(it.price) + '</button>';
+    akajiBox = '<button class="pbox" data-act="offers"><div class="plabel">最低価格</div><span class="pval">' + (it.akaji === 0 ? '未設定' : yen(it.akaji)) + '</span></button>';
+  } else {
+    priceBox = '<button class="pbox" data-act="offers"><div class="plabel">販売価格</div><span class="pval">' + yen(it.price) + '</span></button>';
+    akajiBox = '<button class="pbox akaji" data-act="offers"><div class="plabel">最低価格</div>' + valHtml(it.akaji) + '</button>';
+  }
+  var stuck = it.akaji > 0 && it.price === it.akaji;
+  var trace = CORE.PRICETRACE_LABEL[it.priceTrace] || '';
+  if(target === 'price') trace = trace ? trace + '→直値下げ' : '';
+  var profitCls = it.profit < 0 ? ' class="minus"' : '';
+  var actions = (pending != null)
+    ? '<button class="abtn" data-act="minus50">さらに−50</button>' +
+      '<button class="abtn" data-act="edit">入力</button>' +
+      '<button class="abtn undo" data-act="undo">取消</button>'
+    : '<button class="abtn" data-act="minus50">−50</button>' +
+      '<button class="abtn" data-act="minus100">−100</button>' +
+      '<button class="abtn" data-act="edit">入力</button>';
+  return '<div class="card' + (pending != null ? ' changed' : '') + '" data-sku="' + esc(it.sku) + '">' +
+    '<div class="crow1"><span class="cond ' + condCls + '">' + esc(condLabel) + '</span>' + dateHtml + '</div>' +
+    '<div class="ctitle">' + esc(it.title) + '</div>' +
+    '<div class="prices">' + priceBox + akajiBox + '</div>' +
+    '<div class="crow3">' +
+      (stuck ? '<span class="tag stuck">下限張り付き</span>' : '') +
+      (trace ? '<span class="tag">' + esc(trace) + '</span>' : '') +
+      '<span class="profit">原価' + yen(it.cost) + ' · 利益<b' + profitCls + '>' + yen(it.profit) + '</b></span>' +
+    '</div>' +
+    '<div class="actions"><button class="abtn keepa" data-act="keepa">Keepa</button>' + actions + '</div>' +
+  '</div>';
+}
+
+function renderMore(){
+  if(!visibleItems.length || renderedCount >= visibleItems.length) return;
+  var frag = [];
+  var end = Math.min(renderedCount + CHUNK, visibleItems.length);
+  for(var i = renderedCount; i < end; i++) frag.push(cardHTML(visibleItems[i]));
+  $('list').insertAdjacentHTML('beforeend', frag.join(''));
+  renderedCount = end;
+}
+
+function refresh(){
+  var list = $('list');
+  if(!parsed){
+    $('controls').hidden = true;
+    updateHeader();
+    return;
+  }
+  $('controls').hidden = false;
+  visibleItems = computeVisible();
+  renderedCount = 0;
+  list.innerHTML = visibleItems.length ? '' :
+    '<div class="empty"><span class="big">🔍</span>該当する商品がありません</div>';
+  renderMore();
+  updateHeader();
+  var total = parsed.items.length;
+  var colN = parsed.items.filter(function(it){ return CORE.isCollector(it.condition); }).length;
+  var stuckN = parsed.items.filter(function(it){ return it.price === it.akaji; }).length;
+  $('stats').textContent = '表示 ' + visibleItems.length + ' / 全' + total + '件 · コレクター' + colN + ' · 張り付き' + stuckN;
+  window.scrollTo(0, 0);
+}
+
+function updateHeader(){
+  var n = Object.keys(changes).length;
+  $('chgBadge').hidden = n === 0;
+  $('chgBadge').textContent = n;
+  $('exportBtn').disabled = !parsed || n === 0;
+  $('fileMeta').textContent = parsed
+    ? fileName + '（' + new Date(importedAt).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) + ' 読込・' + parsed.items.length + '件）'
+    : '';
+}
+
+/* 1枚のカードだけ再描画（全リスト再構築でスクロール位置を壊さない） */
+function updateCard(sku){
+  var el = document.querySelector('.card[data-sku="' + (window.CSS && CSS.escape ? CSS.escape(sku) : sku) + '"]');
+  var it = parsed.items.find(function(x){ return x.sku === sku; });
+  if(el && it){
+    var tmp = document.createElement('div');
+    tmp.innerHTML = cardHTML(it);
+    el.replaceWith(tmp.firstChild);
+  }
+  updateHeader();
+}
+
+/* ---------- カード操作 ---------- */
+$('list').addEventListener('click', function(e){
+  var btn = e.target.closest('[data-act]');
+  if(!btn) return;
+  var card = btn.closest('.card');
+  var sku = card.getAttribute('data-sku');
+  var it = parsed.items.find(function(x){ return x.sku === sku; });
+  if(!it) return;
+  var act = btn.getAttribute('data-act');
+  var target = CORE.targetField(it);
+  var pv = pendingValue(it);
+  var cur = (pv != null) ? pv : it[target];
+
+  if(act === 'offers'){
+    if(it.asin) window.open('https://www.amazon.co.jp/dp/' + encodeURIComponent(it.asin) + '?aod=1', '_blank');
+    return;
+  }
+  if(act === 'keepa'){
+    if(it.asin) window.open('https://keepa.com/#!product/5-' + encodeURIComponent(it.asin), '_blank');
+    return;
+  }
+  if(act === 'minus50' || act === 'minus100'){
+    var delta = act === 'minus50' ? 50 : 100;
+    var nv = Math.max(0, cur - delta);
+    if(nv === it[target]){ delete changes[sku]; }
+    else { changes[sku] = {}; changes[sku][target] = nv; }
+    saveChanges(); updateCard(sku);
+    return;
+  }
+  if(act === 'undo'){
+    delete changes[sku];
+    saveChanges(); updateCard(sku);
+    return;
+  }
+  if(act === 'edit'){
+    var actionsEl = card.querySelector('.actions');
+    actionsEl.outerHTML =
+      '<div class="editrow">' +
+      '<input type="text" inputmode="numeric" pattern="[0-9]*" value="' + cur + '" aria-label="新しい最低価格">' +
+      '<button class="abtn ok" data-edit="ok">決定</button>' +
+      '<button class="abtn" data-edit="cancel">戻る</button>' +
+      '</div>';
+    var input = card.querySelector('.editrow input');
+    input.focus(); input.select();
+    return;
+  }
+});
+$('list').addEventListener('click', function(e){
+  var b = e.target.closest('[data-edit]');
+  if(!b) return;
+  var card = b.closest('.card');
+  var sku = card.getAttribute('data-sku');
+  var it = parsed.items.find(function(x){ return x.sku === sku; });
+  if(b.getAttribute('data-edit') === 'ok'){
+    var v = parseInt(card.querySelector('.editrow input').value.replace(/[^0-9]/g, ''), 10);
+    if(!isNaN(v) && v >= 0){
+      var t = CORE.targetField(it);
+      if(v === it[t]){ delete changes[sku]; }
+      else { changes[sku] = {}; changes[sku][t] = v; }
+      saveChanges();
+    }
+  }
+  updateCard(sku);
+});
+$('list').addEventListener('keydown', function(e){
+  if(e.key === 'Enter' && e.target.matches('.editrow input')){
+    var ok = e.target.closest('.editrow').querySelector('[data-edit="ok"]');
+    ok.click();
+  }
+});
+
+/* ---------- 無限スクロール ---------- */
+new IntersectionObserver(function(entries){
+  if(entries[0].isIntersecting) renderMore();
+}, { rootMargin: '600px' }).observe($('moreSentinel'));
+
+/* ---------- 書き出し ---------- */
+function openSheet(){
+  var n = Object.keys(changes).length;
+  $('sheetDesc').textContent =
+    '変更' + n + '件を反映した全' + parsed.items.length + '件のCSVを書き出します。' +
+    'プライスターの「CSVで一括変更」→アップロードでそのまま取り込めます。' +
+    '価格追従ありの商品は最低価格、追従なし（コレクター等）は販売価格を書き換えています。';
+  $('sheetBack').classList.add('show');
+  $('sheet').classList.add('show');
+}
+function closeSheet(){
+  $('sheetBack').classList.remove('show');
+  $('sheet').classList.remove('show');
+}
+$('exportBtn').addEventListener('click', openSheet);
+$('sheetBack').addEventListener('click', closeSheet);
+$('closeSheet').addEventListener('click', closeSheet);
+
+$('doExport').addEventListener('click', function(){
+  try{
+    var out = CORE.buildExport(fileBytes, parsed, changes);
+    var d = new Date();
+    var pad = function(n){ return String(n).padStart(2, '0'); };
+    var name = 'editUploadProduct_FBA_nesage_' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + '.csv';
+    var blob = new Blob([out.bytes], { type: 'text/csv' });
+    var file = new File([blob], name, { type: 'text/csv' });
+    if(navigator.canShare && navigator.canShare({ files: [file] })){
+      navigator.share({ files: [file] }).then(function(){
+        toast('書き出しました（変更' + out.changeCount + '件）');
+      }).catch(function(){ /* キャンセルは何もしない */ });
+    } else {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 5000);
+      toast('ダウンロードしました（変更' + out.changeCount + '件）');
+    }
+  }catch(e){
+    toast('書き出し失敗：' + e.message);
+  }
+});
+
+$('clearChanges').addEventListener('click', function(){
+  var n = Object.keys(changes).length;
+  if(!n) { closeSheet(); return; }
+  if(confirm('保留中の変更 ' + n + ' 件をすべて取り消しますか？')){
+    changes = {};
+    saveChanges();
+    closeSheet();
+    refresh();
+    toast('変更を取り消しました');
+  }
+});
+
+/* ---------- 起動 ---------- */
+loadChanges();
+idbGet('file').then(function(saved){
+  if(saved && saved.bytes){
+    try{
+      fileBytes = saved.bytes instanceof Uint8Array ? saved.bytes : new Uint8Array(saved.bytes);
+      fileName = saved.name; importedAt = saved.at;
+      parsed = CORE.parseFile(fileBytes);
+    }catch(e){ fileBytes = null; parsed = null; }
+  }
+  refresh();
+}).catch(function(){ refresh(); });
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  });
+}
+})();
+</script>
+</body>
+</html>
