@@ -194,6 +194,7 @@ h1{font-size:1.06rem;font-weight:700;letter-spacing:-0.01em;flex:1}
 <header>
   <div class="hrow">
     <h1>値下げスター</h1>
+    <button class="hbtn" id="cloudBtn">☁️ 更新</button>
     <button class="hbtn" id="importBtn">CSV読込</button>
     <button class="hbtn" id="exportBtn" disabled>書き出し<span class="badge" id="chgBadge" hidden>0</span></button>
   </div>
@@ -249,6 +250,7 @@ var CORE = window.CSVCore;
 /* ---------- 状態 ---------- */
 var fileBytes = null;      // Uint8Array（元CSVそのまま）
 var fileName = '';
+var fileSource = '';       // 'クラウド …取得' など（空なら手動読込）
 var importedAt = 0;
 var parsed = null;         // CORE.parseFile の結果
 var changes = {};          // { sku: newAkaji }
@@ -315,6 +317,75 @@ function toast(msg){
   toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2200);
 }
 
+/* ---------- 共通取り込み（ファイル・クラウド両方から呼ぶ） ---------- */
+function ingestBytes(u8, name, sourceLabel){
+  var p = CORE.parseFile(u8);
+  fileBytes = u8; fileName = name; fileSource = sourceLabel || ''; importedAt = Date.now(); parsed = p;
+  idbPut('file', { bytes: u8, name: name, at: importedAt, source: fileSource });
+  var known = {};
+  p.items.forEach(function(it){ known[it.sku] = 1; });
+  var dropped = 0;
+  Object.keys(changes).forEach(function(sku){ if(!known[sku]){ delete changes[sku]; dropped++; } });
+  if(dropped) saveChanges();
+  toast(p.items.length + '件 読み込みました' + (dropped ? '（対象外の変更' + dropped + '件は削除）' : ''));
+  refresh();
+}
+
+/* ---------- クラウド更新 ---------- */
+var DATA_URL = localStorage.getItem('nesage-data-url') || 'https://nesage-data.pages.dev/latest.json';
+var LS_PASS = 'nesage-pass';
+
+function b64ToU8(s){
+  var bin = atob(s);
+  var u8 = new Uint8Array(bin.length);
+  for(var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+
+function decryptBlob(blob, passphrase){
+  var enc = new TextEncoder();
+  return crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey'])
+    .then(function(base){
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: b64ToU8(blob.salt), iterations: blob.iter, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    })
+    .then(function(key){
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToU8(blob.iv) }, key, b64ToU8(blob.ct));
+    })
+    .then(function(buf){ return new Uint8Array(buf); });
+}
+
+$('cloudBtn').addEventListener('click', function(){
+  var btn = this;
+  btn.disabled = true;
+  fetch(DATA_URL, { cache: 'no-store' })
+    .then(function(r){
+      if(!r.ok) throw new Error('データがまだありません（' + r.status + '）');
+      return r.json();
+    })
+    .then(function(blob){
+      var pass = localStorage.getItem(LS_PASS);
+      if(!pass){
+        pass = (prompt('合言葉を入力してください（初回のみ）') || '').trim();
+        if(!pass) throw new Error('キャンセルしました');
+      }
+      return decryptBlob(blob, pass).then(function(u8){
+        localStorage.setItem(LS_PASS, pass);
+        var label = 'クラウド ' + new Date(blob.fetchedAt).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) + ' 取得';
+        ingestBytes(u8, blob.name || 'editUploadProduct_FBA.csv', label);
+      }).catch(function(e){
+        if(e && e.name === 'OperationError'){
+          localStorage.removeItem(LS_PASS);
+          throw new Error('合言葉が違います。もう一度「☁️ 更新」を押してください');
+        }
+        throw e;
+      });
+    })
+    .catch(function(e){ toast(e.message || '更新に失敗しました'); })
+    .finally(function(){ btn.disabled = false; });
+});
+
 /* ---------- 読み込み ---------- */
 $('importBtn').addEventListener('click', function(){ $('fileInput').click(); });
 $('fileInput').addEventListener('change', function(){
@@ -324,18 +395,7 @@ $('fileInput').addEventListener('change', function(){
   var reader = new FileReader();
   reader.onload = function(){
     try{
-      var u8 = new Uint8Array(reader.result);
-      var p = CORE.parseFile(u8);
-      fileBytes = u8; fileName = f.name; importedAt = Date.now(); parsed = p;
-      idbPut('file', { bytes: u8, name: f.name, at: importedAt });
-      // 現CSVに存在しないSKUの変更は自動で落とす
-      var known = {};
-      p.items.forEach(function(it){ known[it.sku] = 1; });
-      var dropped = 0;
-      Object.keys(changes).forEach(function(sku){ if(!known[sku]){ delete changes[sku]; dropped++; } });
-      if(dropped) saveChanges();
-      toast(p.items.length + '件 読み込みました' + (dropped ? '（対象外の変更' + dropped + '件は削除）' : ''));
-      refresh();
+      ingestBytes(new Uint8Array(reader.result), f.name, '');
     }catch(e){
       toast('読み込み失敗：' + e.message);
     }
@@ -502,7 +562,7 @@ function updateHeader(){
   $('chgBadge').textContent = n;
   $('exportBtn').disabled = !parsed || n === 0;
   $('fileMeta').textContent = parsed
-    ? fileName + '（' + new Date(importedAt).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) + ' 読込・' + parsed.items.length + '件）'
+    ? (fileSource || fileName + ' ' + new Date(importedAt).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) + ' 読込') + '・' + parsed.items.length + '件'
     : '';
 }
 
@@ -655,7 +715,7 @@ idbGet('file').then(function(saved){
   if(saved && saved.bytes){
     try{
       fileBytes = saved.bytes instanceof Uint8Array ? saved.bytes : new Uint8Array(saved.bytes);
-      fileName = saved.name; importedAt = saved.at;
+      fileName = saved.name; importedAt = saved.at; fileSource = saved.source || '';
       parsed = CORE.parseFile(fileBytes);
     }catch(e){ fileBytes = null; parsed = null; }
   }
