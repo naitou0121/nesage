@@ -185,6 +185,10 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .sheetbtn.sub{background:#f1ece0;color:var(--text)}
 .sheetbtn.warn{background:#f1ece0;color:var(--red)}
 
+/* ---------- Keepaグラフの小窓 ---------- */
+.graphwrap{margin-bottom:10px;min-height:180px}
+.graphimg{width:100%;border:1px solid var(--line);border-radius:6px;background:#faf6ec;min-height:180px;object-fit:contain}
+
 /* ---------- 出品一覧の小窓 ---------- */
 .offersbody{max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:0 -6px 10px;padding:0 6px}
 .orow{
@@ -258,6 +262,20 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   <button class="sheetbtn" id="doExport">CSVを書き出す（共有 / 保存）</button>
   <button class="sheetbtn warn" id="clearChanges">変更をすべて取り消す</button>
   <button class="sheetbtn sub" id="closeSheet">閉じる</button>
+</div>
+
+<div class="sheetback" id="graphBack"></div>
+<div class="sheet" id="graphSheet">
+  <div class="grabber"></div>
+  <h2 id="graphTitle">Keepa 価格推移</h2>
+  <div class="chiprow" style="margin-bottom:10px">
+    <button class="chip" data-range="30">30日</button>
+    <button class="chip on" data-range="90">90日</button>
+    <button class="chip" data-range="365">1年</button>
+  </div>
+  <div class="graphwrap"><img class="graphimg" id="graphImg" referrerpolicy="no-referrer" alt="価格推移グラフ"></div>
+  <button class="sheetbtn sub" id="graphKeepa">Keepaサイトで開く</button>
+  <button class="sheetbtn sub" id="graphClose">閉じる</button>
 </div>
 
 <div class="sheetback" id="offersBack"></div>
@@ -557,11 +575,10 @@ function cardHTML(it){
   var profitCls = it.profit < 0 ? ' class="minus"' : '';
   var profitPct = it.price > 0 ? ' (' + (it.profit / it.price * 100).toFixed(1) + '%)' : '';
   var actions = (pending != null)
-    ? '<button class="abtn" data-act="minus50">さらに−50</button>' +
+    ? '<button class="abtn" data-act="minus100">さらに−100</button>' +
       '<button class="abtn" data-act="edit">入力</button>' +
       '<button class="abtn undo" data-act="undo">取消</button>'
-    : '<button class="abtn" data-act="minus50">−50</button>' +
-      '<button class="abtn" data-act="minus100">−100</button>' +
+    : '<button class="abtn" data-act="minus100">−100</button>' +
       '<button class="abtn" data-act="edit">入力</button>';
   return '<div class="card' + (pending != null ? ' changed' : '') + '" data-sku="' + esc(it.sku) + '">' +
     '<div class="ctop">' +
@@ -660,7 +677,7 @@ $('list').addEventListener('click', function(e){
     return;
   }
   if(act === 'keepa'){
-    if(it.asin) window.open('https://keepa.com/#!product/5-' + encodeURIComponent(it.asin), '_blank');
+    openGraph(it);
     return;
   }
   if(act === 'minus50' || act === 'minus100'){
@@ -711,6 +728,38 @@ $('list').addEventListener('keydown', function(e){
     var ok = e.target.closest('.editrow').querySelector('[data-edit="ok"]');
     ok.click();
   }
+});
+
+/* ---------- Keepaグラフの小窓（キー不要画像・トークン消費なし） ---------- */
+var graphAsin = null;
+function graphURL(asin, range){
+  return 'https://graph.keepa.com/pricehistory.png?asin=' + encodeURIComponent(asin) +
+    '&domain=co.jp&salesrank=1&amazon=1&new=1&used=1&range=' + range + '&width=760&height=340';
+}
+function openGraph(it){
+  if(!it.asin) return;
+  graphAsin = it.asin;
+  $('graphTitle').textContent = 'Keepa 価格推移';
+  var chips = document.querySelectorAll('#graphSheet .chip');
+  chips.forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-range') === '90'); });
+  $('graphImg').src = graphURL(it.asin, 90);
+  $('graphBack').classList.add('show');
+  $('graphSheet').classList.add('show');
+}
+function closeGraph(){ $('graphBack').classList.remove('show'); $('graphSheet').classList.remove('show'); }
+$('graphBack').addEventListener('click', closeGraph);
+$('graphClose').addEventListener('click', closeGraph);
+$('graphKeepa').addEventListener('click', function(){
+  if(graphAsin) window.open('https://keepa.com/#!product/5-' + encodeURIComponent(graphAsin), '_blank');
+});
+document.querySelectorAll('#graphSheet .chip').forEach(function(chip){
+  chip.addEventListener('click', function(){
+    document.querySelectorAll('#graphSheet .chip').forEach(function(c){ c.classList.toggle('on', c === chip); });
+    if(graphAsin) $('graphImg').src = graphURL(graphAsin, chip.getAttribute('data-range'));
+  });
+});
+$('graphImg').addEventListener('error', function(){
+  this.alt = 'グラフを取得できませんでした。下の「Keepaサイトで開く」からどうぞ';
 });
 
 /* ---------- 出品一覧の小窓（Keepa・タップ時のみ6トークン） ---------- */
