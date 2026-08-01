@@ -9,6 +9,8 @@
 <title>値下げスター</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="preconnect" href="https://api.keepa.com" crossorigin>
+<link rel="preconnect" href="https://images-na.ssl-images-amazon.com">
 <style>
 :root{
   --bg:#f6efdd; --card:#ffffff; --line:#e0d7c3;
@@ -1017,7 +1019,8 @@ function openOffers(it){
     $('offersFoot').textContent += '（' + Math.round((Date.now() - cached.at) / 60000) + '分前に取得）';
     return;
   }
-  $('offersBody').innerHTML = '<div class="oload"><div class="spinner"></div>Keepaから取得中…</div>';
+  $('offersBody').innerHTML = '<div class="oload"><div class="spinner"></div>Keepaから取得中…<br>' +
+    '<span style="font-size:.72rem">初めて見る商品は数秒かかります</span></div>';
   $('offersFoot').textContent = '';
   // history=0 & only-live-offers=1：現在の出品だけ取る（7.4秒→1.2秒・トークンも半分以下）
   fetch('https://api.keepa.com/product?key=' + encodeURIComponent(key) +
@@ -1025,10 +1028,24 @@ function openOffers(it){
         '&offers=20&history=0&only-live-offers=1')
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if(data.error){
-        var msg = data.error.message || 'エラー';
-        if(data.tokensLeft != null && data.tokensLeft < 6) msg = 'トークン不足（残' + data.tokensLeft + '・毎分1回復）。少し待ってください';
-        $('offersBody').innerHTML = '<div class="oload">' + esc(msg) + '</div>';
+      // トークン切れはエラーではなく「空の応答」で返ってくる（tokensLeftがマイナス）
+      var noData = !data.products || !data.products.length;
+      if(data.error || (noData && data.tokensLeft != null && data.tokensLeft < 6)){
+        var msg = (data.error && data.error.message) || 'Keepaのトークンが足りません';
+        if(data.tokensLeft != null && data.tokensLeft < 6){
+          var wait = Math.max(1, Math.ceil((6 - data.tokensLeft)));
+          msg = 'Keepaのトークン切れです（残' + data.tokensLeft + '）<br>' +
+                '約' + wait + '分で使えるようになります<br>' +
+                '<span style="font-size:.75rem">急ぐときは下の「Amazonで開く」から</span>';
+        }
+        $('offersBody').innerHTML = '<div class="oload">' + msg + '</div>';
+        $('offersFoot').textContent = '';
+        return;
+      }
+      if(noData){
+        $('offersBody').innerHTML = '<div class="oload">この商品の情報がKeepaにありませんでした<br>' +
+          '<span style="font-size:.75rem">下の「Amazonで開く」から確認できます</span></div>';
+        $('offersFoot').textContent = '';
         return;
       }
       offersCache[it.asin] = { at: Date.now(), data: data };
