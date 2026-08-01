@@ -193,7 +193,28 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .arow .an{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)}
 .arow .av{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
 .arow .av .newv{color:var(--orange-deep)}
-.applying{opacity:.5;pointer-events:none}
+.applying{pointer-events:none}
+.applying .applylist, .applying #sheetDesc{opacity:.35}
+
+/* 反映中／結果の表示 */
+.applybox{
+  border:1px solid var(--line);border-radius:8px;background:#faf6ec;
+  padding:16px 14px;margin-bottom:12px;text-align:center;
+}
+.applybox.ok{background:#eef8f0;border-color:#a9d8b8}
+.applybox.ng{background:#fdeae8;border-color:#efb9b4}
+.spinner{
+  width:30px;height:30px;margin:0 auto 10px;border-radius:50%;
+  border:3px solid #e6dcc6;border-top-color:var(--orange);
+  animation:spin .9s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.applystep{font-size:.9rem;font-weight:700;margin-bottom:4px}
+.applynote{font-size:.76rem;color:var(--text2);line-height:1.6}
+.applybig{font-size:1.5rem;margin-bottom:6px}
+.applyres{font-size:.95rem;font-weight:800;margin-bottom:5px}
+.applyres.ok{color:var(--green)}
+.applyres.ng{color:var(--red)}
 
 /* ---------- 詳細編集シート ---------- */
 .edtrow{display:flex;align-items:center;gap:9px;margin-bottom:11px}
@@ -296,6 +317,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   <div class="grabber"></div>
   <h2>プライスターに反映する</h2>
   <p id="sheetDesc"></p>
+  <div id="applyStatus" hidden></div>
   <div class="applylist" id="applyList"></div>
   <button class="sheetbtn" id="doApply">この内容で反映する</button>
   <button class="sheetbtn sub" id="doExport">CSVで書き出す（従来の方法）</button>
@@ -1067,11 +1089,81 @@ function changeSummaryHTML(){
 
 function openSheet(){
   var n = Object.keys(changes).length;
-  $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（1〜2分）。反映後は「☁️ 更新」で最新状態が入ります。';
+  $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（1〜2分）。';
+  $('sheetDesc').hidden = false;
+  $('applyStatus').hidden = true;
+  $('applyStatus').innerHTML = '';
+  $('applyList').hidden = false;
   $('applyList').innerHTML = changeSummaryHTML();
+  $('doApply').hidden = false;
   $('doApply').disabled = n === 0;
+  $('doApply').textContent = 'この内容で反映する';
+  $('doExport').hidden = false;
+  $('clearChanges').hidden = false;
+  $('closeSheet').textContent = '閉じる';
+  $('sheet').classList.remove('applying');
   $('sheetBack').classList.add('show');
   $('sheet').classList.add('show');
+}
+
+var APPLY_STEPS = [
+  'プライスターにログイン中…',
+  '最新の在庫を取り出し中…',
+  '変更を書き込み中…',
+  'プライスターで処理中…',
+];
+var applyTimer = null;
+
+function showApplyProgress(n){
+  var i = 0;
+  $('applyStatus').hidden = false;
+  var render = function(){
+    $('applyStatus').innerHTML =
+      '<div class="applybox">' +
+        '<div class="spinner"></div>' +
+        '<div class="applystep">' + APPLY_STEPS[i] + '</div>' +
+        '<div class="applynote">' + n + '件を反映しています（あと' + Math.max(5, 75 - i * 18) + '秒ほど）<br>' +
+        'この画面を閉じずにお待ちください</div>' +
+      '</div>';
+  };
+  render();
+  clearInterval(applyTimer);
+  applyTimer = setInterval(function(){
+    if(i < APPLY_STEPS.length - 1){ i++; render(); }
+  }, 18000);
+}
+
+function showApplyResult(res, err){
+  clearInterval(applyTimer);
+  $('applyStatus').hidden = false;
+  $('sheet').classList.remove('applying');
+  if(err){
+    // 失敗時は変更内容とボタンを残して、そのまま再試行できるようにする
+    $('applyStatus').innerHTML =
+      '<div class="applybox ng">' +
+        '<div class="applybig">⚠️</div>' +
+        '<div class="applyres ng">反映できませんでした</div>' +
+        '<div class="applynote">' + esc(err) + '<br>変更内容はそのまま残っています。もう一度お試しください</div>' +
+      '</div>';
+    return;
+  }
+  $('sheetDesc').hidden = true;
+  $('applyList').hidden = true;
+  $('doApply').hidden = true;
+  $('doExport').hidden = true;
+  $('clearChanges').hidden = true;
+  var changed = res.applied != null ? res.applied : 0;
+  var errN = res.errorCount != null ? res.errorCount : 0;
+  $('applyStatus').innerHTML =
+    '<div class="applybox ok">' +
+      '<div class="applybig">✅</div>' +
+      '<div class="applyres ok">プライスターに反映しました</div>' +
+      '<div class="applynote"><b>' + changed + '件</b>の変更を書き込みました' +
+        (errN ? '<br>エラー ' + errN + '件（プライスターの画面で確認してください）' : '') +
+        (res.missing && res.missing.length ? '<br>見つからなかった商品：' + res.missing.length + '件' : '') +
+      '</div>' +
+    '</div>';
+  $('closeSheet').textContent = '閉じる';
 }
 
 $('doApply').addEventListener('click', function(){
@@ -1080,34 +1172,45 @@ $('doApply').addEventListener('click', function(){
   var pass = localStorage.getItem('nesage-pass');
   if(!pass){ toast('先に「☁️ 更新」で合言葉を入れてください'); return; }
   if(!confirm('プライスターに ' + n + ' 件を反映します。よろしいですか？')) return;
+  var sent = changes;
+  var payload = JSON.stringify({ pass: pass, changes: sent });
   var btn = this;
   btn.disabled = true;
-  btn.textContent = '反映中…（1〜2分かかります）';
+  btn.textContent = '反映中…';
   $('sheet').classList.add('applying');
+  showApplyProgress(n);
   fetch(APPLY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pass: pass, changes: changes }),
+    body: payload,
   })
     .then(function(r){ return r.json(); })
     .then(function(res){
       if(res.error) throw new Error(res.error);
+      // 反映した内容を手元のデータにも反映（クラウドは1日2回更新なので取り直さない）
+      try{
+        var out = CORE.buildExport(fileBytes, parsed, sent);
+        fileBytes = out.bytes;
+        parsed = CORE.parseFile(fileBytes);
+        fileSource = '反映済み ' + new Date().toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+        idbPut('file', { bytes: fileBytes, name: fileName, at: importedAt, source: fileSource });
+      }catch(e){}
       changes = {};
       saveChanges();
-      closeSheet();
       refresh();
-      toast('反映しました（成功' + (res.successCount != null ? res.successCount : res.applied) + '件・エラー' + (res.errorCount != null ? res.errorCount : 0) + '件）');
+      showApplyResult(res, null);
     })
-    .catch(function(e){ toast('反映できませんでした：' + (e.message || '')); })
-    .finally(function(){
+    .catch(function(e){
+      showApplyResult(null, e.message || '通信に失敗しました');
       btn.disabled = false;
       btn.textContent = 'この内容で反映する';
-      $('sheet').classList.remove('applying');
     });
 });
 function closeSheet(){
+  clearInterval(applyTimer);
   $('sheetBack').classList.remove('show');
   $('sheet').classList.remove('show');
+  $('sheet').classList.remove('applying');
 }
 $('exportBtn').addEventListener('click', openSheet);
 $('sheetBack').addEventListener('click', closeSheet);
