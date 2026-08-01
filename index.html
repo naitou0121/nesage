@@ -109,46 +109,51 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .cdate .days{font-weight:800}
 .cdate .days.old{color:var(--red)}
 
-/* 価格グリッド */
-.pgrid{display:flex;gap:7px;margin-bottom:7px}
-.pbox{
-  flex:1;min-width:0;border-radius:6px;padding:6px 9px;background:#faf6ec;border:1px solid var(--line);
-  text-align:left;transition:transform .1s ease-out;
+/* 価格グリッド：3欄をその場で編集 */
+.pgrid{display:flex;gap:5px;margin-bottom:6px}
+.pcell{flex:1;min-width:0}
+.plabel{font-size:.62rem;font-weight:700;color:var(--text2);white-space:nowrap;margin-bottom:2px;
+  overflow:hidden;text-overflow:ellipsis}
+.pin{
+  width:100%;min-height:36px;border-radius:6px;border:1px solid var(--line);background:#fff;
+  padding:0 7px;font-size:16px;font-weight:800;color:var(--text);outline:none;
+  font-variant-numeric:tabular-nums;letter-spacing:-0.02em;text-align:right;
 }
-.pbox:active{transform:scale(.96)}
-.plabel{font-size:.65rem;font-weight:700;color:var(--text2);white-space:nowrap}
-.pbox.akaji{background:var(--orange-pale);border-color:var(--orange)}
-.pbox.akaji .plabel{color:var(--orange-deep)}
-.pbox.akaji .plabel::after{content:" ▼値下げ"}
-.pbox.lowest{background:var(--blue-pale);border-color:#9cc4e4}
-.pbox.lowest .plabel{color:#2f6ea3}
-.pval{font-size:1.05rem;font-weight:800;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;line-height:1.3}
-.pval .arrow{color:var(--orange-deep);font-weight:800}
-.pval .newv{color:var(--orange-deep)}
-.pval.link{color:#2f6ea3;font-size:.86rem;font-weight:800}
-.metaline{font-size:.73rem;color:var(--text2);margin-bottom:8px;font-variant-numeric:tabular-nums}
+.pin:focus{border-color:var(--orange);box-shadow:0 0 0 2px var(--orange-pale)}
+.pin.dirty{border-color:var(--orange-deep);background:var(--orange-pale);color:var(--orange-deep)}
+.pcell.aim .plabel{color:var(--orange-deep)}
+.pcell.aim .pin{border-color:var(--orange)}
+.porig{font-size:.6rem;color:var(--text3);text-align:right;min-height:.9em;margin-top:1px;
+  font-variant-numeric:tabular-nums}
+
+/* メタ行：仕入れ・粗利益・自動変更（タップ切替） */
+.metaline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  font-size:.7rem;color:var(--text2);margin-bottom:7px;font-variant-numeric:tabular-nums}
 .metaline b{color:var(--green);font-weight:800}
 .metaline b.minus{color:var(--red)}
-.metaline .cost{border:1px solid var(--yellow-line);background:var(--yellow-pale);border-radius:4px;padding:0 5px;color:#8a6d1a;font-weight:700}
+.metaline .cost{border:1px solid var(--yellow-line);background:var(--yellow-pale);border-radius:4px;
+  padding:0 4px;color:#8a6d1a;font-weight:700}
+.tracebtn{
+  margin-left:auto;flex-shrink:0;font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:5px;
+  background:var(--blue-pale);color:#2f6ea3;border:1px solid #bcd8ee;transition:transform .1s ease-out;
+}
+.tracebtn:active{transform:scale(.94)}
+.tracebtn.aim{background:var(--orange-deep);color:#fff;border-color:#c65f08}
+.tracebtn.dirty{background:var(--orange);color:#fff;border-color:var(--orange-deep)}
 
 /* アクション */
-.actions{display:flex;gap:7px}
+.actions{display:flex;gap:6px}
 .abtn{
-  flex:1;min-height:38px;border-radius:6px;font-size:.9rem;font-weight:800;
+  flex:1;min-height:36px;border-radius:6px;font-size:.82rem;font-weight:800;
   background:#fff;color:var(--orange-deep);border:1.5px solid var(--orange);
   transition:transform .1s ease-out,background .15s;
 }
 .abtn:active{transform:scale(.95);background:var(--orange-pale)}
-.abtn.undo{color:var(--red);border-color:#e0a8a4}
-.abtn.keepa{flex:0 0 auto;padding:0 12px;background:#31b0d5;border-color:#2494b5;color:#fff;font-weight:700;font-size:.8rem}
-.editrow{display:flex;gap:7px}
-.editrow input{
-  flex:1;min-width:0;min-height:38px;border-radius:6px;border:1.5px solid var(--orange-deep);
-  padding:0 12px;font-size:16px;background:#fff;color:var(--text);outline:none;
-  font-variant-numeric:tabular-nums;
+.abtn.undo{flex:0 0 auto;padding:0 12px;color:var(--red);border-color:#e0a8a4}
+.abtn.icon{
+  flex:0 0 40px;padding:0;font-size:1.05rem;background:#eaf6fa;border-color:#a9d4e4;color:#2494b5;
 }
-.editrow .abtn{flex:0 0 auto;padding:0 16px}
-.editrow .abtn.ok{background:var(--orange);color:#fff}
+.abtn.offers{flex:1.4;background:var(--blue-pale);border-color:#9cc4e4;color:#2f6ea3}
 
 /* ---------- 空状態・その他 ---------- */
 .empty{padding:56px 28px;text-align:center;color:var(--text2);font-size:.9rem;line-height:1.9}
@@ -217,14 +222,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .applyres.ng{color:var(--red)}
 
 /* ---------- 詳細編集シート ---------- */
-.edtrow{display:flex;align-items:center;gap:9px;margin-bottom:11px}
-.edtlabel{flex:0 0 96px;font-size:.8rem;font-weight:700;color:var(--text2)}
-.edtinput{
-  flex:1;min-width:0;min-height:42px;border-radius:6px;border:1.5px solid var(--line);
-  padding:0 12px;font-size:16px;background:#fff;color:var(--text);outline:none;font-variant-numeric:tabular-nums;
-}
-.edtinput:focus{border-color:var(--orange)}
-.edtorig{font-size:.7rem;color:var(--text3);flex:0 0 auto;min-width:58px;text-align:right}
+.edtlabel{font-size:.8rem;font-weight:700;color:var(--text2)}
 .tracegrid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .tracegrid button{
   flex:1 1 30%;min-height:38px;border-radius:6px;font-size:.8rem;font-weight:700;
@@ -323,38 +321,6 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   <button class="sheetbtn sub" id="doExport">CSVで書き出す（従来の方法）</button>
   <button class="sheetbtn warn" id="clearChanges">変更をすべて取り消す</button>
   <button class="sheetbtn sub" id="closeSheet">閉じる</button>
-</div>
-
-<div class="sheetback" id="edtBack"></div>
-<div class="sheet" id="edtSheet">
-  <div class="grabber"></div>
-  <h2 id="edtTitle">価格を編集</h2>
-  <div class="edtrow">
-    <span class="edtlabel">出品価格</span>
-    <input class="edtinput" id="edtPrice" type="text" inputmode="numeric" pattern="[0-9]*">
-    <span class="edtorig" id="edtPriceOrig"></span>
-  </div>
-  <div class="edtrow">
-    <span class="edtlabel">赤字ｽﾄｯﾊﾟｰ</span>
-    <input class="edtinput" id="edtAkaji" type="text" inputmode="numeric" pattern="[0-9]*">
-    <span class="edtorig" id="edtAkajiOrig"></span>
-  </div>
-  <div class="edtrow">
-    <span class="edtlabel">高値ｽﾄｯﾊﾟｰ</span>
-    <input class="edtinput" id="edtTakane" type="text" inputmode="numeric" pattern="[0-9]*">
-    <span class="edtorig" id="edtTakaneOrig"></span>
-  </div>
-  <div class="edtlabel" style="margin-bottom:7px">価格の自動変更</div>
-  <div class="tracegrid" id="edtTrace">
-    <button data-t="0">しない</button>
-    <button data-t="2">状態合わせ</button>
-    <button data-t="4">最安値</button>
-    <button data-t="1">FBA状態合わせ</button>
-    <button data-t="3">FBA最安値</button>
-    <button data-t="5">カート価格</button>
-  </div>
-  <button class="sheetbtn" id="edtOk">この内容にする</button>
-  <button class="sheetbtn sub" id="edtCancel">閉じる</button>
 </div>
 
 <div class="sheetback" id="bulkBack"></div>
@@ -659,71 +625,68 @@ function thumbURL(asin){
 function cardHTML(it){
   var isCol = CORE.isCollector(it.condition);
   var condLabel = CORE.CONDITION_LABEL[it.condition] || ('状態' + it.condition);
-  // PC在庫一覧の表記に合わせる：中古品 良い／コレクター商品 良い
   var condText = condLabel.replace('中古・', '中古品 ').replace('コレクター・', 'コレクター商品 ');
   var days = daysSince(it.dateStr);
   var dateHtml = '';
   if(it.dateStr){
     var dstr = (+it.dateStr.slice(4,6)) + '/' + (+it.dateStr.slice(6,8));
     if(+it.dateStr.slice(0,4) !== new Date().getFullYear()) dstr = it.dateStr.slice(0,4) + '/' + dstr;
-    dateHtml = '<span class="cdate">' + dstr + '作成 · <span class="days' + (days >= 60 ? ' old' : '') + '">' + days + '日</span></span>';
+    dateHtml = '<span class="cdate">' + dstr + ' · <span class="days' + (days >= 60 ? ' old' : '') + '">' + days + '日</span></span>';
   } else {
-    dateHtml = '<span class="cdate">作成日不明</span>';
+    dateHtml = '<span class="cdate">日付不明</span>';
   }
   var chg = changes[it.sku] || {};
-  var target = CORE.targetField(it);       // 'price'（出品価格を直値下げ）| 'akaji'（赤字ストッパー）
-  var pending = pendingValue(it);
-  var traceNew = (chg.priceTrace != null && chg.priceTrace !== '') ? String(chg.priceTrace) : null;
-  var takaneNew = (chg.takane != null && chg.takane !== '') ? chg.takane : null;
-  var valHtml = function(orig){
-    return (pending != null)
-      ? '<span class="pval">' + yen(orig) + '<span class="arrow"> → </span><span class="newv">' + yen(pending) + '</span></span>'
-      : '<span class="pval">' + yen(orig) + '</span>';
-  };
-  var priceBox, akajiBox;
-  if(target === 'price'){
-    priceBox = '<button class="pbox akaji" data-act="offers"><div class="plabel">出品価格</div>' + valHtml(it.price) + '</button>';
-    akajiBox = '<button class="pbox" data-act="offers"><div class="plabel">赤字ｽﾄｯﾊﾟｰ</div><span class="pval">' + (it.akaji === 0 ? '－' : yen(it.akaji)) + '</span></button>';
-  } else {
-    priceBox = '<button class="pbox" data-act="offers"><div class="plabel">出品価格</div><span class="pval">' + yen(it.price) + '</span></button>';
-    akajiBox = '<button class="pbox akaji" data-act="offers"><div class="plabel">赤字ｽﾄｯﾊﾟｰ</div>' + valHtml(it.akaji) + '</button>';
-  }
-  var lowestBox = '<button class="pbox lowest" data-act="offers"><div class="plabel">最低価格</div><span class="pval link">出品一覧 ›</span></button>';
-  var stuck = it.akaji > 0 && it.price === it.akaji;
-  var trace = traceNew
-    ? (CORE.PRICETRACE_LABEL[it.priceTrace] || '') + '→' + (CORE.PRICETRACE_LABEL[traceNew] || traceNew)
-    : (CORE.PRICETRACE_LABEL[it.priceTrace] || '');
-  var traceCls = traceNew ? 'tg-trace aim' : ((it.priceTrace === '2' || it.priceTrace === '1') ? 'tg-trace aim' : 'tg-trace');
-  var profitCls = it.profit < 0 ? ' class="minus"' : '';
-  var profitPct = it.price > 0 ? ' (' + (it.profit / it.price * 100).toFixed(1) + '%)' : '';
-  var actions = (Object.keys(chg).length > 0)
-    ? '<button class="abtn" data-act="minus100">' + (pending != null ? 'さらに−100' : '−100') + '</button>' +
-      '<button class="abtn" data-act="edit">編集</button>' +
-      '<button class="abtn undo" data-act="undo">取消</button>'
-    : '<button class="abtn" data-act="minus100">−100</button>' +
-      '<button class="abtn" data-act="edit">編集</button>';
   var hasChange = Object.keys(chg).length > 0;
+  var target = CORE.targetField(it);       // 'price'（出品価格を直値下げ）| 'akaji'（赤字ストッパー）
+
+  function inputCell(field, label){
+    var dirty = chg[field] != null && chg[field] !== '';
+    var v = dirty ? chg[field] : it[field];
+    return '<div class="pcell' + (field === target ? ' aim' : '') + '">' +
+      '<div class="plabel">' + label + (field === target ? ' ▼' : '') + '</div>' +
+      '<input class="pin' + (dirty ? ' dirty' : '') + '" type="text" inputmode="numeric" pattern="[0-9]*"' +
+        ' data-field="' + field + '" value="' + v + '" aria-label="' + label + '">' +
+      '<div class="porig">' + (dirty ? '元' + (it[field] === 0 ? '－' : yen(it[field])) : '') + '</div>' +
+    '</div>';
+  }
+
+  var traceNow = (chg.priceTrace != null && chg.priceTrace !== '') ? String(chg.priceTrace) : String(it.priceTrace);
+  var traceLabel = CORE.PRICETRACE_LABEL[traceNow] || traceNow;
+  var traceCls = (chg.priceTrace != null && chg.priceTrace !== '') ? 'dirty'
+    : ((traceNow === '2' || traceNow === '1') ? 'aim' : '');
+  var stuck = it.akaji > 0 && it.price === it.akaji;
+  var profitCls = it.profit < 0 ? ' class="minus"' : '';
+  var profitPct = it.price > 0 ? ' (' + (it.profit / it.price * 100).toFixed(0) + '%)' : '';
+
   return '<div class="card' + (hasChange ? ' changed' : '') + '" data-sku="' + esc(it.sku) + '">' +
     '<div class="ctop">' +
       '<img class="thumb" src="' + thumbURL(it.asin) + '" loading="lazy" alt="" onerror="this.classList.add(\'noimg\')">' +
       '<div class="cmain">' +
         '<button class="ctitle" data-act="amazon">' + esc(it.title) + '</button>' +
-        '<div class="csub">' + esc(it.asin) + ' · ' + esc(it.sku) + '</div>' +
         '<div class="tagrow">' +
           '<span class="tg tg-cond' + (isCol ? ' collector' : '') + '">' + esc(condText) + '</span>' +
-          (trace ? '<span class="tg ' + traceCls + '">' + esc(trace) + (target === 'price' ? '→直値下げ' : '') + '</span>' : '') +
           (stuck ? '<span class="tg tg-stuck">下限張り付き</span>' : '') +
           dateHtml +
         '</div>' +
       '</div>' +
     '</div>' +
-    '<div class="pgrid">' + priceBox + akajiBox + lowestBox + '</div>' +
-    '<div class="metaline">仕入れ <span class="cost">' + yen(it.cost) + '</span> · 粗利益 <b' + profitCls + '>' + yen(it.profit) + profitPct + '</b>' +
-      (takaneNew != null ? ' · 高値ｽﾄｯﾊﾟｰ ' + (it.takane > 0 ? yen(it.takane) : '－') + '→' + yen(takaneNew)
-        : (it.takane > 0 ? ' · 高値ｽﾄｯﾊﾟｰ ' + yen(it.takane) : '')) +
-      (it.number > 1 ? ' · 数量' + it.number : '') +
+    '<div class="pgrid">' +
+      inputCell('price', '出品価格') +
+      inputCell('akaji', '赤字ｽﾄｯﾊﾟｰ') +
+      inputCell('takane', '高値ｽﾄｯﾊﾟｰ') +
     '</div>' +
-    '<div class="actions"><button class="abtn keepa" data-act="keepa">Keepa</button>' + actions + '</div>' +
+    '<div class="metaline">' +
+      '仕入 <span class="cost">' + yen(it.cost) + '</span>' +
+      ' · 粗利 <b' + profitCls + '>' + yen(it.profit) + profitPct + '</b>' +
+      (it.number > 1 ? ' · ' + it.number + '個' : '') +
+      '<button class="tracebtn ' + traceCls + '" data-act="trace">' + esc(traceLabel) + ' ⇄</button>' +
+    '</div>' +
+    '<div class="actions">' +
+      '<button class="abtn icon" data-act="keepa" aria-label="Keepaグラフ">📈</button>' +
+      '<button class="abtn offers" data-act="offers">出品一覧</button>' +
+      '<button class="abtn" data-act="minus100">−100</button>' +
+      (hasChange ? '<button class="abtn undo" data-act="undo">取消</button>' : '') +
+    '</div>' +
   '</div>';
 }
 
@@ -818,61 +781,61 @@ $('list').addEventListener('click', function(e){
     saveChanges(); updateCard(sku);
     return;
   }
-  if(act === 'edit'){
-    openEdit(it);
+  if(act === 'trace'){
+    var order = ['0', '2', '4', '1', '3', '5'];
+    var now = (chg2(sku).priceTrace != null && chg2(sku).priceTrace !== '') ? String(chg2(sku).priceTrace) : String(it.priceTrace);
+    var next = order[(order.indexOf(now) + 1) % order.length];
+    setField(it, 'priceTrace', next);
+    updateCard(sku);
     return;
   }
 });
 
-/* ---------- 詳細編集シート（価格・赤字・高値・自動変更） ---------- */
-var edtSku = null;
-function fieldValue(it, f){
-  var c = changes[it.sku];
-  if(c && c[f] != null && c[f] !== '') return c[f];
-  return it[f];
-}
-function openEdit(it){
-  edtSku = it.sku;
-  $('edtTitle').textContent = it.title.slice(0, 26) + (it.title.length > 26 ? '…' : '');
-  $('edtPrice').value = fieldValue(it, 'price');
-  $('edtAkaji').value = fieldValue(it, 'akaji');
-  $('edtTakane').value = fieldValue(it, 'takane');
-  $('edtPriceOrig').textContent = '元 ' + yen(it.price);
-  $('edtAkajiOrig').textContent = '元 ' + (it.akaji === 0 ? '－' : yen(it.akaji));
-  $('edtTakaneOrig').textContent = '元 ' + (it.takane === 0 ? '－' : yen(it.takane));
-  var cur = String(fieldValue(it, 'priceTrace'));
-  document.querySelectorAll('#edtTrace button').forEach(function(b){
-    b.classList.toggle('on', b.getAttribute('data-t') === cur);
-  });
-  $('edtBack').classList.add('show'); $('edtSheet').classList.add('show');
-}
-function closeEdit(){ $('edtBack').classList.remove('show'); $('edtSheet').classList.remove('show'); }
-$('edtBack').addEventListener('click', closeEdit);
-$('edtCancel').addEventListener('click', closeEdit);
-document.querySelectorAll('#edtTrace button').forEach(function(b){
-  b.addEventListener('click', function(){
-    document.querySelectorAll('#edtTrace button').forEach(function(x){ x.classList.toggle('on', x === b); });
-  });
-});
-$('edtOk').addEventListener('click', function(){
-  var it = parsed.items.find(function(x){ return x.sku === edtSku; });
-  if(!it) { closeEdit(); return; }
-  var num = function(id){
-    var v = parseInt(String($(id).value).replace(/[^0-9]/g, ''), 10);
-    return isNaN(v) ? null : v;
-  };
-  var vals = { price: num('edtPrice'), akaji: num('edtAkaji'), takane: num('edtTakane') };
-  var traceBtn = document.querySelector('#edtTrace button.on');
-  vals.priceTrace = traceBtn ? traceBtn.getAttribute('data-t') : String(it.priceTrace);
-  var c = {};
-  ['price', 'akaji', 'takane'].forEach(function(f){
-    if(vals[f] != null && vals[f] !== it[f]) c[f] = vals[f];
-  });
-  if(vals.priceTrace !== String(it.priceTrace)) c.priceTrace = vals.priceTrace;
+function chg2(sku){ return changes[sku] || {}; }
+
+/* 1フィールドの変更を記録（元の値に戻ったら記録を消す） */
+function setField(it, field, val){
+  var c = changes[it.sku] || {};
+  if(String(val) === String(it[field])) delete c[field];
+  else c[field] = val;
   if(Object.keys(c).length) changes[it.sku] = c; else delete changes[it.sku];
   saveChanges();
-  closeEdit();
-  refresh();
+}
+
+/* カード内の数値入力（入力中は再描画しない） */
+$('list').addEventListener('input', function(e){
+  var inp = e.target.closest('.pin');
+  if(!inp) return;
+  var card = inp.closest('.card');
+  var it = parsed.items.find(function(x){ return x.sku === card.getAttribute('data-sku'); });
+  if(!it) return;
+  var field = inp.getAttribute('data-field');
+  var v = parseInt(String(inp.value).replace(/[^0-9]/g, ''), 10);
+  if(isNaN(v)) return;
+  setField(it, field, v);
+  inp.classList.toggle('dirty', v !== it[field]);
+  var orig = inp.parentNode.querySelector('.porig');
+  if(orig) orig.textContent = (v !== it[field]) ? '元' + (it[field] === 0 ? '－' : yen(it[field])) : '';
+  card.classList.toggle('changed', Object.keys(changes[it.sku] || {}).length > 0);
+  updateHeader();
+});
+
+/* 入力を離れたら整形（空欄は元の値に戻す） */
+$('list').addEventListener('focusout', function(e){
+  var inp = e.target.closest('.pin');
+  if(!inp) return;
+  var card = inp.closest('.card');
+  var it = parsed.items.find(function(x){ return x.sku === card.getAttribute('data-sku'); });
+  if(!it) return;
+  var field = inp.getAttribute('data-field');
+  var v = parseInt(String(inp.value).replace(/[^0-9]/g, ''), 10);
+  if(isNaN(v)){
+    var c = changes[it.sku] || {};
+    delete c[field];
+    if(Object.keys(c).length) changes[it.sku] = c; else delete changes[it.sku];
+    saveChanges();
+  }
+  updateCard(it.sku);
 });
 
 /* ---------- まとめて設定（表示中＋経過日数で絞る） ---------- */
@@ -1089,7 +1052,7 @@ function changeSummaryHTML(){
 
 function openSheet(){
   var n = Object.keys(changes).length;
-  $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（1〜2分）。';
+  $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（10秒ほど）。';
   $('sheetDesc').hidden = false;
   $('applyStatus').hidden = true;
   $('applyStatus').innerHTML = '';
@@ -1108,11 +1071,12 @@ function openSheet(){
 
 var APPLY_STEPS = [
   'プライスターにログイン中…',
-  '最新の在庫を取り出し中…',
+  '最新の在庫を確認中…',
   '変更を書き込み中…',
   'プライスターで処理中…',
 ];
 var applyTimer = null;
+var lastApplyKinds = { price: false, stopper: false };
 
 function showApplyProgress(n){
   var i = 0;
@@ -1122,7 +1086,7 @@ function showApplyProgress(n){
       '<div class="applybox">' +
         '<div class="spinner"></div>' +
         '<div class="applystep">' + APPLY_STEPS[i] + '</div>' +
-        '<div class="applynote">' + n + '件を反映しています（あと' + Math.max(5, 75 - i * 18) + '秒ほど）<br>' +
+        '<div class="applynote">' + n + '件を反映しています（10秒ほど）<br>' +
         'この画面を閉じずにお待ちください</div>' +
       '</div>';
   };
@@ -1130,7 +1094,7 @@ function showApplyProgress(n){
   clearInterval(applyTimer);
   applyTimer = setInterval(function(){
     if(i < APPLY_STEPS.length - 1){ i++; render(); }
-  }, 18000);
+  }, 2500);
 }
 
 function showApplyResult(res, err){
@@ -1154,14 +1118,19 @@ function showApplyResult(res, err){
   $('clearChanges').hidden = true;
   var changed = res.applied != null ? res.applied : 0;
   var errN = res.errorCount != null ? res.errorCount : 0;
+  var note = '<b>' + changed + '件</b>の変更を書き込みました';
+  if(lastApplyKinds.stopper && !lastApplyKinds.price){
+    note += '<br><br>赤字ストッパー・高値ストッパーを変えた商品は、<b>出品価格はすぐには動きません</b>。プライスターの自動改定が走ったときに新しい下限で付け直されます。';
+  }
+  if(errN) note += '<br>エラー ' + errN + '件' +
+    (res.errorRows && res.errorRows.length ? '：' + esc(res.errorRows[0].reason || '') : '');
+  if(res.missing && res.missing.length) note += '<br>在庫に無かった商品：' + res.missing.length + '件';
+  if(res.conflicts && res.conflicts.length) note += '<br>設定の矛盾で送らなかった商品：' + res.conflicts.length + '件';
   $('applyStatus').innerHTML =
     '<div class="applybox ok">' +
       '<div class="applybig">✅</div>' +
       '<div class="applyres ok">プライスターに反映しました</div>' +
-      '<div class="applynote"><b>' + changed + '件</b>の変更を書き込みました' +
-        (errN ? '<br>エラー ' + errN + '件（プライスターの画面で確認してください）' : '') +
-        (res.missing && res.missing.length ? '<br>見つからなかった商品：' + res.missing.length + '件' : '') +
-      '</div>' +
+      '<div class="applynote">' + note + '</div>' +
     '</div>';
   $('closeSheet').textContent = '閉じる';
 }
@@ -1173,6 +1142,12 @@ $('doApply').addEventListener('click', function(){
   if(!pass){ toast('先に「☁️ 更新」で合言葉を入れてください'); return; }
   if(!confirm('プライスターに ' + n + ' 件を反映します。よろしいですか？')) return;
   var sent = changes;
+  lastApplyKinds = { price: false, stopper: false };
+  Object.keys(sent).forEach(function(sku){
+    var c = sent[sku];
+    if(c.price != null && c.price !== '') lastApplyKinds.price = true;
+    if((c.akaji != null && c.akaji !== '') || (c.takane != null && c.takane !== '')) lastApplyKinds.stopper = true;
+  });
   var payload = JSON.stringify({ pass: pass, changes: sent });
   var btn = this;
   btn.disabled = true;
