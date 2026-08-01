@@ -185,6 +185,42 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .sheetbtn.sub{background:#f1ece0;color:var(--text)}
 .sheetbtn.warn{background:#f1ece0;color:var(--red)}
 
+/* ---------- 反映シート ---------- */
+.applylist{max-height:34vh;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px;
+  border:1px solid var(--line);border-radius:6px;background:#faf6ec}
+.arow{display:flex;gap:8px;align-items:baseline;padding:7px 9px;border-bottom:1px solid #efe8d6;font-size:.78rem}
+.arow:last-child{border-bottom:none}
+.arow .an{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)}
+.arow .av{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.arow .av .newv{color:var(--orange-deep)}
+.applying{opacity:.5;pointer-events:none}
+
+/* ---------- 詳細編集シート ---------- */
+.edtrow{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.edtlabel{flex:0 0 96px;font-size:.8rem;font-weight:700;color:var(--text2)}
+.edtinput{
+  flex:1;min-width:0;min-height:42px;border-radius:6px;border:1.5px solid var(--line);
+  padding:0 12px;font-size:16px;background:#fff;color:var(--text);outline:none;font-variant-numeric:tabular-nums;
+}
+.edtinput:focus{border-color:var(--orange)}
+.edtorig{font-size:.7rem;color:var(--text3);flex:0 0 auto;min-width:58px;text-align:right}
+.tracegrid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.tracegrid button{
+  flex:1 1 30%;min-height:38px;border-radius:6px;font-size:.8rem;font-weight:700;
+  background:#fff;border:1px solid var(--line);color:var(--text2);
+}
+.tracegrid button.on{background:var(--orange);border-color:var(--orange-deep);color:#fff}
+
+/* ---------- 一括操作シート ---------- */
+.bulkhint{font-size:.78rem;color:var(--text2);line-height:1.7;margin-bottom:10px}
+.bulkcount{font-size:.9rem;font-weight:800;color:var(--orange-deep);margin-bottom:12px}
+.daysrow{display:flex;gap:7px;margin-bottom:12px;align-items:center}
+.daysrow input{
+  flex:0 0 90px;min-height:42px;border-radius:6px;border:1.5px solid var(--orange);
+  padding:0 12px;font-size:16px;text-align:center;background:#fff;color:var(--text);outline:none;
+}
+.daysrow span{font-size:.85rem;color:var(--text2)}
+
 /* ---------- Keepaグラフの小窓 ---------- */
 .graphwrap{margin-bottom:10px;min-height:180px}
 .graphimg{width:100%;border:1px solid var(--line);border-radius:6px;background:#faf6ec;min-height:180px;object-fit:contain}
@@ -221,7 +257,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
     <h1>値下げスター</h1>
     <button class="hbtn" id="cloudBtn">☁️ 更新</button>
     <button class="hbtn" id="importBtn">CSV読込</button>
-    <button class="hbtn" id="exportBtn" disabled>書き出し<span class="badge" id="chgBadge" hidden>0</span></button>
+    <button class="hbtn" id="exportBtn" disabled>反映<span class="badge" id="chgBadge" hidden>0</span></button>
   </div>
   <div class="filemeta" id="fileMeta"></div>
 </header>
@@ -236,6 +272,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
     <button class="chip on" id="sortChip" data-mode="new">新しい順</button>
     <button class="chip" id="stuckChip">下限張り付き</button>
     <button class="chip" id="changedChip">変更のみ</button>
+    <button class="chip" id="bulkChip">まとめて設定</button>
   </div>
   <div class="searchwrap"><input class="search" id="search" type="search" placeholder="タイトル・SKUで検索" autocomplete="off"></div>
   <div class="stats" id="stats"></div>
@@ -257,11 +294,68 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 <div class="sheetback" id="sheetBack"></div>
 <div class="sheet" id="sheet">
   <div class="grabber"></div>
-  <h2>変更をCSVに書き出す</h2>
+  <h2>プライスターに反映する</h2>
   <p id="sheetDesc"></p>
-  <button class="sheetbtn" id="doExport">CSVを書き出す（共有 / 保存）</button>
+  <div class="applylist" id="applyList"></div>
+  <button class="sheetbtn" id="doApply">この内容で反映する</button>
+  <button class="sheetbtn sub" id="doExport">CSVで書き出す（従来の方法）</button>
   <button class="sheetbtn warn" id="clearChanges">変更をすべて取り消す</button>
   <button class="sheetbtn sub" id="closeSheet">閉じる</button>
+</div>
+
+<div class="sheetback" id="edtBack"></div>
+<div class="sheet" id="edtSheet">
+  <div class="grabber"></div>
+  <h2 id="edtTitle">価格を編集</h2>
+  <div class="edtrow">
+    <span class="edtlabel">出品価格</span>
+    <input class="edtinput" id="edtPrice" type="text" inputmode="numeric" pattern="[0-9]*">
+    <span class="edtorig" id="edtPriceOrig"></span>
+  </div>
+  <div class="edtrow">
+    <span class="edtlabel">赤字ｽﾄｯﾊﾟｰ</span>
+    <input class="edtinput" id="edtAkaji" type="text" inputmode="numeric" pattern="[0-9]*">
+    <span class="edtorig" id="edtAkajiOrig"></span>
+  </div>
+  <div class="edtrow">
+    <span class="edtlabel">高値ｽﾄｯﾊﾟｰ</span>
+    <input class="edtinput" id="edtTakane" type="text" inputmode="numeric" pattern="[0-9]*">
+    <span class="edtorig" id="edtTakaneOrig"></span>
+  </div>
+  <div class="edtlabel" style="margin-bottom:7px">価格の自動変更</div>
+  <div class="tracegrid" id="edtTrace">
+    <button data-t="0">しない</button>
+    <button data-t="2">状態合わせ</button>
+    <button data-t="4">最安値</button>
+    <button data-t="1">FBA状態合わせ</button>
+    <button data-t="3">FBA最安値</button>
+    <button data-t="5">カート価格</button>
+  </div>
+  <button class="sheetbtn" id="edtOk">この内容にする</button>
+  <button class="sheetbtn sub" id="edtCancel">閉じる</button>
+</div>
+
+<div class="sheetback" id="bulkBack"></div>
+<div class="sheet" id="bulkSheet">
+  <div class="grabber"></div>
+  <h2>まとめて価格の自動変更</h2>
+  <p class="bulkhint">いま表示している商品が対象です（絞り込み・検索が効きます）。<br>出品からの経過日数でさらに絞れます。</p>
+  <div class="daysrow">
+    <input id="bulkDays" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="90">
+    <span>日以上たった商品だけ（空欄なら全部）</span>
+  </div>
+  <div class="bulkcount" id="bulkCount"></div>
+  <div class="edtlabel" style="margin-bottom:7px">この設定に切り替える</div>
+  <div class="tracegrid" id="bulkTrace">
+    <button data-t="4">最安値</button>
+    <button data-t="2">状態合わせ</button>
+    <button data-t="3">FBA最安値</button>
+    <button data-t="1">FBA状態合わせ</button>
+    <button data-t="5">カート価格</button>
+    <button data-t="0">しない</button>
+  </div>
+  <button class="sheetbtn" id="bulkOk">この設定にする</button>
+  <button class="sheetbtn sub" id="bulkCancel">閉じる</button>
 </div>
 
 <div class="sheetback" id="graphBack"></div>
@@ -383,6 +477,7 @@ function ingestBytes(u8, name, sourceLabel){
 
 /* ---------- クラウド更新 ---------- */
 var DATA_URL = localStorage.getItem('nesage-data-url') || 'https://nesage-data.pages.dev/latest.json';
+var APPLY_URL = localStorage.getItem('nesage-apply-url') || 'https://nesage-apply.naitou0121.workers.dev';
 var LS_PASS = 'nesage-pass';
 
 function b64ToU8(s){
@@ -553,8 +648,11 @@ function cardHTML(it){
   } else {
     dateHtml = '<span class="cdate">作成日不明</span>';
   }
+  var chg = changes[it.sku] || {};
   var target = CORE.targetField(it);       // 'price'（出品価格を直値下げ）| 'akaji'（赤字ストッパー）
   var pending = pendingValue(it);
+  var traceNew = (chg.priceTrace != null && chg.priceTrace !== '') ? String(chg.priceTrace) : null;
+  var takaneNew = (chg.takane != null && chg.takane !== '') ? chg.takane : null;
   var valHtml = function(orig){
     return (pending != null)
       ? '<span class="pval">' + yen(orig) + '<span class="arrow"> → </span><span class="newv">' + yen(pending) + '</span></span>'
@@ -570,17 +668,20 @@ function cardHTML(it){
   }
   var lowestBox = '<button class="pbox lowest" data-act="offers"><div class="plabel">最低価格</div><span class="pval link">出品一覧 ›</span></button>';
   var stuck = it.akaji > 0 && it.price === it.akaji;
-  var trace = CORE.PRICETRACE_LABEL[it.priceTrace] || '';
-  var traceCls = (it.priceTrace === '2' || it.priceTrace === '1') ? 'tg-trace aim' : 'tg-trace';
+  var trace = traceNew
+    ? (CORE.PRICETRACE_LABEL[it.priceTrace] || '') + '→' + (CORE.PRICETRACE_LABEL[traceNew] || traceNew)
+    : (CORE.PRICETRACE_LABEL[it.priceTrace] || '');
+  var traceCls = traceNew ? 'tg-trace aim' : ((it.priceTrace === '2' || it.priceTrace === '1') ? 'tg-trace aim' : 'tg-trace');
   var profitCls = it.profit < 0 ? ' class="minus"' : '';
   var profitPct = it.price > 0 ? ' (' + (it.profit / it.price * 100).toFixed(1) + '%)' : '';
-  var actions = (pending != null)
-    ? '<button class="abtn" data-act="minus100">さらに−100</button>' +
-      '<button class="abtn" data-act="edit">入力</button>' +
+  var actions = (Object.keys(chg).length > 0)
+    ? '<button class="abtn" data-act="minus100">' + (pending != null ? 'さらに−100' : '−100') + '</button>' +
+      '<button class="abtn" data-act="edit">編集</button>' +
       '<button class="abtn undo" data-act="undo">取消</button>'
     : '<button class="abtn" data-act="minus100">−100</button>' +
-      '<button class="abtn" data-act="edit">入力</button>';
-  return '<div class="card' + (pending != null ? ' changed' : '') + '" data-sku="' + esc(it.sku) + '">' +
+      '<button class="abtn" data-act="edit">編集</button>';
+  var hasChange = Object.keys(chg).length > 0;
+  return '<div class="card' + (hasChange ? ' changed' : '') + '" data-sku="' + esc(it.sku) + '">' +
     '<div class="ctop">' +
       '<img class="thumb" src="' + thumbURL(it.asin) + '" loading="lazy" alt="" onerror="this.classList.add(\'noimg\')">' +
       '<div class="cmain">' +
@@ -596,7 +697,8 @@ function cardHTML(it){
     '</div>' +
     '<div class="pgrid">' + priceBox + akajiBox + lowestBox + '</div>' +
     '<div class="metaline">仕入れ <span class="cost">' + yen(it.cost) + '</span> · 粗利益 <b' + profitCls + '>' + yen(it.profit) + profitPct + '</b>' +
-      (it.takane > 0 ? ' · 高値ｽﾄｯﾊﾟｰ ' + yen(it.takane) : '') +
+      (takaneNew != null ? ' · 高値ｽﾄｯﾊﾟｰ ' + (it.takane > 0 ? yen(it.takane) : '－') + '→' + yen(takaneNew)
+        : (it.takane > 0 ? ' · 高値ｽﾄｯﾊﾟｰ ' + yen(it.takane) : '')) +
       (it.number > 1 ? ' · 数量' + it.number : '') +
     '</div>' +
     '<div class="actions"><button class="abtn keepa" data-act="keepa">Keepa</button>' + actions + '</div>' +
@@ -683,8 +785,9 @@ $('list').addEventListener('click', function(e){
   if(act === 'minus50' || act === 'minus100'){
     var delta = act === 'minus50' ? 50 : 100;
     var nv = Math.max(0, cur - delta);
-    if(nv === it[target]){ delete changes[sku]; }
-    else { changes[sku] = {}; changes[sku][target] = nv; }
+    var c = changes[sku] || {};
+    if(nv === it[target]) delete c[target]; else c[target] = nv;
+    if(Object.keys(c).length) changes[sku] = c; else delete changes[sku];
     saveChanges(); updateCard(sku);
     return;
   }
@@ -694,40 +797,109 @@ $('list').addEventListener('click', function(e){
     return;
   }
   if(act === 'edit'){
-    var actionsEl = card.querySelector('.actions');
-    actionsEl.outerHTML =
-      '<div class="editrow">' +
-      '<input type="text" inputmode="numeric" pattern="[0-9]*" value="' + cur + '" aria-label="新しい最低価格">' +
-      '<button class="abtn ok" data-edit="ok">決定</button>' +
-      '<button class="abtn" data-edit="cancel">戻る</button>' +
-      '</div>';
-    var input = card.querySelector('.editrow input');
-    input.focus(); input.select();
+    openEdit(it);
     return;
   }
 });
-$('list').addEventListener('click', function(e){
-  var b = e.target.closest('[data-edit]');
-  if(!b) return;
-  var card = b.closest('.card');
-  var sku = card.getAttribute('data-sku');
-  var it = parsed.items.find(function(x){ return x.sku === sku; });
-  if(b.getAttribute('data-edit') === 'ok'){
-    var v = parseInt(card.querySelector('.editrow input').value.replace(/[^0-9]/g, ''), 10);
-    if(!isNaN(v) && v >= 0){
-      var t = CORE.targetField(it);
-      if(v === it[t]){ delete changes[sku]; }
-      else { changes[sku] = {}; changes[sku][t] = v; }
-      saveChanges();
-    }
-  }
-  updateCard(sku);
+
+/* ---------- 詳細編集シート（価格・赤字・高値・自動変更） ---------- */
+var edtSku = null;
+function fieldValue(it, f){
+  var c = changes[it.sku];
+  if(c && c[f] != null && c[f] !== '') return c[f];
+  return it[f];
+}
+function openEdit(it){
+  edtSku = it.sku;
+  $('edtTitle').textContent = it.title.slice(0, 26) + (it.title.length > 26 ? '…' : '');
+  $('edtPrice').value = fieldValue(it, 'price');
+  $('edtAkaji').value = fieldValue(it, 'akaji');
+  $('edtTakane').value = fieldValue(it, 'takane');
+  $('edtPriceOrig').textContent = '元 ' + yen(it.price);
+  $('edtAkajiOrig').textContent = '元 ' + (it.akaji === 0 ? '－' : yen(it.akaji));
+  $('edtTakaneOrig').textContent = '元 ' + (it.takane === 0 ? '－' : yen(it.takane));
+  var cur = String(fieldValue(it, 'priceTrace'));
+  document.querySelectorAll('#edtTrace button').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-t') === cur);
+  });
+  $('edtBack').classList.add('show'); $('edtSheet').classList.add('show');
+}
+function closeEdit(){ $('edtBack').classList.remove('show'); $('edtSheet').classList.remove('show'); }
+$('edtBack').addEventListener('click', closeEdit);
+$('edtCancel').addEventListener('click', closeEdit);
+document.querySelectorAll('#edtTrace button').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('#edtTrace button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  });
 });
-$('list').addEventListener('keydown', function(e){
-  if(e.key === 'Enter' && e.target.matches('.editrow input')){
-    var ok = e.target.closest('.editrow').querySelector('[data-edit="ok"]');
-    ok.click();
-  }
+$('edtOk').addEventListener('click', function(){
+  var it = parsed.items.find(function(x){ return x.sku === edtSku; });
+  if(!it) { closeEdit(); return; }
+  var num = function(id){
+    var v = parseInt(String($(id).value).replace(/[^0-9]/g, ''), 10);
+    return isNaN(v) ? null : v;
+  };
+  var vals = { price: num('edtPrice'), akaji: num('edtAkaji'), takane: num('edtTakane') };
+  var traceBtn = document.querySelector('#edtTrace button.on');
+  vals.priceTrace = traceBtn ? traceBtn.getAttribute('data-t') : String(it.priceTrace);
+  var c = {};
+  ['price', 'akaji', 'takane'].forEach(function(f){
+    if(vals[f] != null && vals[f] !== it[f]) c[f] = vals[f];
+  });
+  if(vals.priceTrace !== String(it.priceTrace)) c.priceTrace = vals.priceTrace;
+  if(Object.keys(c).length) changes[it.sku] = c; else delete changes[it.sku];
+  saveChanges();
+  closeEdit();
+  refresh();
+});
+
+/* ---------- まとめて設定（表示中＋経過日数で絞る） ---------- */
+function bulkTargets(){
+  var days = parseInt(String($('bulkDays').value).replace(/[^0-9]/g, ''), 10);
+  return visibleItems.filter(function(it){
+    if(isNaN(days)) return true;
+    var d = daysSince(it.dateStr);
+    return d != null && d >= days;
+  });
+}
+function updateBulkCount(){
+  var n = bulkTargets().length;
+  $('bulkCount').textContent = '対象：' + n + '件';
+  $('bulkOk').disabled = n === 0;
+}
+$('bulkChip').addEventListener('click', function(){
+  if(!parsed) return;
+  document.querySelectorAll('#bulkTrace button').forEach(function(b){ b.classList.remove('on'); });
+  document.querySelector('#bulkTrace button[data-t="4"]').classList.add('on');
+  updateBulkCount();
+  $('bulkBack').classList.add('show'); $('bulkSheet').classList.add('show');
+});
+function closeBulk(){ $('bulkBack').classList.remove('show'); $('bulkSheet').classList.remove('show'); }
+$('bulkBack').addEventListener('click', closeBulk);
+$('bulkCancel').addEventListener('click', closeBulk);
+$('bulkDays').addEventListener('input', updateBulkCount);
+document.querySelectorAll('#bulkTrace button').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('#bulkTrace button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  });
+});
+$('bulkOk').addEventListener('click', function(){
+  var btn = document.querySelector('#bulkTrace button.on');
+  if(!btn) return;
+  var t = btn.getAttribute('data-t');
+  var targets = bulkTargets();
+  var n = 0;
+  targets.forEach(function(it){
+    if(String(it.priceTrace) === t) return;   // 既にその設定なら触らない
+    var c = changes[it.sku] || {};
+    c.priceTrace = t;
+    changes[it.sku] = c;
+    n++;
+  });
+  saveChanges();
+  closeBulk();
+  refresh();
+  toast(n ? n + '件を「' + btn.textContent + '」に設定しました' : '変更が必要な商品はありませんでした');
 });
 
 /* ---------- Keepaグラフの小窓（キー不要画像・トークン消費なし） ---------- */
@@ -872,15 +1044,67 @@ new IntersectionObserver(function(entries){
 }, { rootMargin: '600px' }).observe($('moreSentinel'));
 
 /* ---------- 書き出し ---------- */
+var FIELD_LABEL = { price: '出品価格', akaji: '赤字ｽﾄｯﾊﾟｰ', takane: '高値ｽﾄｯﾊﾟｰ', priceTrace: '自動変更' };
+
+function changeSummaryHTML(){
+  var out = [];
+  Object.keys(changes).forEach(function(sku){
+    var it = parsed.items.find(function(x){ return x.sku === sku; });
+    if(!it) return;
+    var c = changes[sku];
+    var bits = [];
+    ['price', 'akaji', 'takane'].forEach(function(f){
+      if(c[f] != null && c[f] !== '') bits.push(FIELD_LABEL[f] + ' ' + yen(it[f]) + '→<span class="newv">' + yen(c[f]) + '</span>');
+    });
+    if(c.priceTrace != null && c.priceTrace !== ''){
+      bits.push('自動変更 ' + (CORE.PRICETRACE_LABEL[it.priceTrace] || '') + '→<span class="newv">' + (CORE.PRICETRACE_LABEL[c.priceTrace] || c.priceTrace) + '</span>');
+    }
+    if(!bits.length) return;
+    out.push('<div class="arow"><span class="an">' + esc(it.title.slice(0, 22)) + '</span><span class="av">' + bits.join(' / ') + '</span></div>');
+  });
+  return out.join('') || '<div class="arow"><span class="an">変更なし</span></div>';
+}
+
 function openSheet(){
   var n = Object.keys(changes).length;
-  $('sheetDesc').textContent =
-    '変更' + n + '件を反映した全' + parsed.items.length + '件のCSVを書き出します。' +
-    'プライスターの「CSVで一括変更」→アップロードでそのまま取り込めます。' +
-    '価格の自動変更ありの商品は赤字ストッパー、なし（コレクター等）は出品価格を書き換えています。';
+  $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（1〜2分）。反映後は「☁️ 更新」で最新状態が入ります。';
+  $('applyList').innerHTML = changeSummaryHTML();
+  $('doApply').disabled = n === 0;
   $('sheetBack').classList.add('show');
   $('sheet').classList.add('show');
 }
+
+$('doApply').addEventListener('click', function(){
+  var n = Object.keys(changes).length;
+  if(!n) return;
+  var pass = localStorage.getItem('nesage-pass');
+  if(!pass){ toast('先に「☁️ 更新」で合言葉を入れてください'); return; }
+  if(!confirm('プライスターに ' + n + ' 件を反映します。よろしいですか？')) return;
+  var btn = this;
+  btn.disabled = true;
+  btn.textContent = '反映中…（1〜2分かかります）';
+  $('sheet').classList.add('applying');
+  fetch(APPLY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pass: pass, changes: changes }),
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res.error) throw new Error(res.error);
+      changes = {};
+      saveChanges();
+      closeSheet();
+      refresh();
+      toast('反映しました（成功' + (res.successCount != null ? res.successCount : res.applied) + '件・エラー' + (res.errorCount != null ? res.errorCount : 0) + '件）');
+    })
+    .catch(function(e){ toast('反映できませんでした：' + (e.message || '')); })
+    .finally(function(){
+      btn.disabled = false;
+      btn.textContent = 'この内容で反映する';
+      $('sheet').classList.remove('applying');
+    });
+});
 function closeSheet(){
   $('sheetBack').classList.remove('show');
   $('sheet').classList.remove('show');

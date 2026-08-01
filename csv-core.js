@@ -143,7 +143,7 @@
     let changeCount = 0;
     for (const item of parsed.items) {
       const c = changes[item.sku];
-      if (c && (c.price != null || c.akaji != null)) {
+      if (c && ['price', 'akaji', 'takane', 'priceTrace'].some(function (f) { return c[f] != null && c[f] !== ''; })) {
         lineToNew[item.line] = c;
         changeCount++;
       }
@@ -158,14 +158,15 @@
       const cells = CORE.parseCells(u8, line.start, line.end);
       // 差し替え対象セルを列indexの昇順で並べて前から出力
       const repl = [];
-      if (c.price != null) repl.push({ idx: parsed.col.price, val: c.price });
-      if (c.akaji != null) repl.push({ idx: parsed.col.akaji, val: c.akaji });
+      ['price', 'akaji', 'takane', 'priceTrace'].forEach(function (f) {
+        if (c[f] != null && c[f] !== '') repl.push({ idx: parsed.col[f], val: c[f] });
+      });
       repl.sort(function (a, b) { return a.idx - b.idx; });
       let pos = line.start;
       repl.forEach(function (r) {
         const cell = cells[r.idx];
         parts.push(u8.subarray(pos, cell.start));
-        parts.push(enc.encode('"' + Math.round(r.val) + '"'));
+        parts.push(enc.encode('"' + String(r.val) + '"'));
         pos = cell.end;
       });
       parts.push(u8.subarray(pos, line.fullEnd));
