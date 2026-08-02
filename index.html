@@ -176,7 +176,8 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .abtn.icon{
   flex:0 0 40px;padding:0;font-size:1.05rem;background:#eaf6fa;border-color:#a9d4e4;color:#2494b5;
 }
-.abtn.offers{flex:1.4;background:var(--blue-pale);border-color:#9cc4e4;color:#2f6ea3}
+.abtn.offers{flex:1.2;background:var(--blue-pale);border-color:#9cc4e4;color:#2f6ea3}
+.abtn.mer{flex:1;background:#fdeceb;border-color:#f0b3ae;color:#c0392b}
 
 /* ---------- 空状態・その他 ---------- */
 .empty{padding:56px 28px;text-align:center;color:var(--text2);font-size:.9rem;line-height:1.9}
@@ -354,7 +355,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v15</div>
+  <div class="ver">v16</div>
 </header>
 
 <div id="ptPane">
@@ -1708,7 +1709,8 @@ function fmCardHTML(it){
         '自動値下げ ' + (autoOn ? 'ON' : 'OFF') + '</button>' +
     '</div>' +
     '<div class="actions">' +
-      '<button class="abtn offers" data-act="fmopen">' + (fmShopId ? '商品ページ' : 'メルカリで探す') + '</button>' +
+      '<button class="abtn offers" data-act="fmopen">商品ページ</button>' +
+      '<button class="abtn mer" data-act="fmsearch">メルカリ</button>' +
       '<button class="abtn" data-act="fmminus100">−100</button>' +
       (hasChange ? '<button class="abtn undo" data-act="fmundo">取消</button>' : '') +
     '</div>' +
@@ -1780,6 +1782,11 @@ $('fmList').addEventListener('click', function(e){
       ? 'https://mercari-shops.com/seller/shops/' + encodeURIComponent(fmShopId) + '/products/' + encodeURIComponent(it.id) + '/edit'
       : 'https://jp.mercari.com/search?keyword=' + encodeURIComponent(it.name.slice(0, 30));
     window.open(url, '_blank');
+    return;
+  }
+  if(act === 'fmsearch'){
+    // 相場を見る：商品名でメルカリを検索（売り切れ含む）
+    window.open('https://jp.mercari.com/search?keyword=' + encodeURIComponent(it.name.slice(0, 40)), '_blank');
     return;
   }
   if(act === 'fmminus100'){
