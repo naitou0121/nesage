@@ -11,6 +11,7 @@
 <link rel="apple-touch-icon" href="./icon-180.png">
 <link rel="preconnect" href="https://api.keepa.com" crossorigin>
 <link rel="preconnect" href="https://images-na.ssl-images-amazon.com">
+<link rel="preconnect" href="https://assets.mercari-shops-static.com">
 <style>
 :root{
   --bg:#f6efdd; --card:#ffffff; --line:#e0d7c3;
@@ -359,7 +360,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 <div class="sheetback" id="sheetBack"></div>
 <div class="sheet" id="sheet">
   <div class="grabber"></div>
-  <h2>プライスターに反映する</h2>
+  <h2 id="sheetTitle">プライスターに反映する</h2>
   <p id="sheetDesc"></p>
   <div id="applyStatus" hidden></div>
   <div class="applylist" id="applyList"></div>
@@ -543,13 +544,26 @@ function decryptBlob(blob, passphrase){
         .then(function(buf){ localStorage.setItem('nesage-keepa', new TextDecoder().decode(buf)); })
         .catch(function(){}));
     }
-    // フリマルの商品データが同梱されていれば取り込む
-    if(blob.furimaru && blob.furimaru.ct){
-      extras.push(crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToU8(blob.furimaru.iv) }, key, b64ToU8(blob.furimaru.ct))
+    // フリマルの写真マップ（先に取り込む）
+    if(blob.furimaruPhotos && blob.furimaruPhotos.ct){
+      extras.push(crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToU8(blob.furimaruPhotos.iv) }, key, b64ToU8(blob.furimaruPhotos.ct))
         .then(function(buf){
-          try{ fmIngest(new Uint8Array(buf), Date.parse(blob.furimaru.fetchedAt) || Date.now()); }catch(e){}
+          try{
+            var m = JSON.parse(new TextDecoder().decode(buf));
+            if(m && Object.keys(m).length){ fmPhotos = m; fmSavePhotos(); }
+          }catch(e){}
         })
         .catch(function(){}));
+    }
+    // フリマルの商品データが同梱されていれば取り込む
+    if(blob.furimaru && blob.furimaru.ct){
+      extras.push(Promise.all(extras.slice()).then(function(){
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToU8(blob.furimaru.iv) }, key, b64ToU8(blob.furimaru.ct))
+          .then(function(buf){
+            try{ fmIngest(new Uint8Array(buf), Date.parse(blob.furimaru.fetchedAt) || Date.now()); }catch(e){}
+          })
+          .catch(function(){});
+      }));
     }
     return Promise.all(extras).then(function(){ return main; });
   });
@@ -1171,6 +1185,8 @@ function fmChangeSummaryHTML(){
 function openSheet(){
   if(site === 'furimaru') return openFmSheet();
   var n = Object.keys(changes).length;
+  $('sheetTitle').textContent = 'プライスターに反映する';
+  $('doApply').textContent = 'プライスターに反映する';
   $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（10秒ほど）。';
   $('sheetDesc').hidden = false;
   $('applyStatus').hidden = true;
@@ -1179,7 +1195,7 @@ function openSheet(){
   $('applyList').innerHTML = changeSummaryHTML();
   $('doApply').hidden = false;
   $('doApply').disabled = n === 0;
-  $('doApply').textContent = 'この内容で反映する';
+  $('doApply').textContent = (site === 'furimaru' ? 'フリマル' : 'プライスター') + 'に反映する';
   $('doExport').hidden = false;
   $('clearChanges').hidden = false;
   $('closeSheet').textContent = '閉じる';
@@ -1256,6 +1272,8 @@ function showApplyResult(res, err){
 
 function openFmSheet(){
   var n = Object.keys(fmChanges).length;
+  $('sheetTitle').textContent = 'フリマルに反映する';
+  $('doApply').textContent = 'フリマルに反映する';
   $('sheetDesc').textContent = '変更' + n + '件をフリマルに反映します。フリマル側の処理に数分かかります。';
   $('sheetDesc').hidden = false;
   $('applyStatus').hidden = true;
@@ -1264,7 +1282,7 @@ function openFmSheet(){
   $('applyList').innerHTML = fmChangeSummaryHTML();
   $('doApply').hidden = false;
   $('doApply').disabled = n === 0;
-  $('doApply').textContent = 'この内容で反映する';
+  $('doApply').textContent = (site === 'furimaru' ? 'フリマル' : 'プライスター') + 'に反映する';
   $('doExport').hidden = true;         // フリマルはCSV書き出しなし
   $('clearChanges').hidden = false;
   $('closeSheet').textContent = '閉じる';
@@ -1321,7 +1339,7 @@ function fmDoApply(){
     .catch(function(e){
       showApplyResult(null, e.message || '通信に失敗しました');
       btn.disabled = false;
-      btn.textContent = 'この内容で反映する';
+      btn.textContent = (site === 'furimaru' ? 'フリマル' : 'プライスター') + 'に反映する';
     });
 }
 
@@ -1369,7 +1387,7 @@ $('doApply').addEventListener('click', function(){
     .catch(function(e){
       showApplyResult(null, e.message || '通信に失敗しました');
       btn.disabled = false;
-      btn.textContent = 'この内容で反映する';
+      btn.textContent = (site === 'furimaru' ? 'フリマル' : 'プライスター') + 'に反映する';
     });
 });
 function closeSheet(){
@@ -1421,6 +1439,12 @@ $('clearChanges').addEventListener('click', function(){
 /* ================= フリマル ================= */
 var FM = window.FuriCore;
 var fmBytes = null, fmParsed = null, fmAt = 0;
+var fmPhotos = (function(){
+  try{ return JSON.parse(localStorage.getItem('nesage-fm-photos') || '{}'); }catch(e){ return {}; }
+})();
+function fmSavePhotos(){
+  try{ localStorage.setItem('nesage-fm-photos', JSON.stringify(fmPhotos)); }catch(e){}
+}
 var fmChanges = {};
 var fmSort = 'new', fmOnlyOld = false, fmOnlyChanged = false, fmQuery = '';
 var fmVisible = [], fmRendered = 0;
@@ -1477,6 +1501,7 @@ function fmCloudUpdate(){
       var bin = atob(res.csv);
       var u8 = new Uint8Array(bin.length);
       for(var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      if(res.photos && Object.keys(res.photos).length){ fmPhotos = res.photos; fmSavePhotos(); }
       var r2 = fmIngest(u8, Date.now());
       toast('フリマル ' + r2.count + '件 取り込みました' + (r2.dropped ? '（対象外の変更' + r2.dropped + '件は削除）' : ''));
     })
@@ -1534,8 +1559,10 @@ function fmCardHTML(it){
   var profit = fmFieldVal(it, 'price') - it.cost - it.shipping - Math.round(fmFieldVal(it, 'price') * 0.1);
   var profitCls = profit < 0 ? ' class="minus"' : '';
   var pct = fmFieldVal(it, 'price') > 0 ? ' (' + Math.round(profit / fmFieldVal(it, 'price') * 100) + '%)' : '';
+  var photo = fmPhotos[it.id];
   return '<div class="card' + (hasChange ? ' changed' : '') + '" data-id="' + esc(it.id) + '">' +
     '<div class="ctop">' +
+      (photo ? '<img class="thumb" src="' + esc(photo) + '" loading="lazy" alt="" referrerpolicy="no-referrer" onerror="this.classList.add(\'noimg\')">' : '') +
       '<div class="cmain">' +
         '<div class="ctitle fm">' + esc(it.name) + '</div>' +
         '<div class="tagrow">' +
