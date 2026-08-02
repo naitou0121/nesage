@@ -537,13 +537,21 @@ function decryptBlob(blob, passphrase){
     var main = crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToU8(blob.iv) }, key, b64ToU8(blob.ct))
       .then(function(buf){ return new Uint8Array(buf); });
     // Keepaキーが同梱されていれば復号して端末に保存（小窓用）
-    var keepa = Promise.resolve();
+    var extras = [];
     if(blob.keepa && blob.keepa.ct){
-      keepa = crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToU8(blob.keepa.iv) }, key, b64ToU8(blob.keepa.ct))
+      extras.push(crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToU8(blob.keepa.iv) }, key, b64ToU8(blob.keepa.ct))
         .then(function(buf){ localStorage.setItem('nesage-keepa', new TextDecoder().decode(buf)); })
-        .catch(function(){});
+        .catch(function(){}));
     }
-    return keepa.then(function(){ return main; });
+    // フリマルの商品データが同梱されていれば取り込む
+    if(blob.furimaru && blob.furimaru.ct){
+      extras.push(crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToU8(blob.furimaru.iv) }, key, b64ToU8(blob.furimaru.ct))
+        .then(function(buf){
+          try{ fmIngest(new Uint8Array(buf), Date.parse(blob.furimaru.fetchedAt) || Date.now()); }catch(e){}
+        })
+        .catch(function(){}));
+    }
+    return Promise.all(extras).then(function(){ return main; });
   });
 }
 
