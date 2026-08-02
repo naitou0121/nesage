@@ -550,6 +550,7 @@ function decryptBlob(blob, passphrase){
         .then(function(buf){
           try{
             var m = JSON.parse(new TextDecoder().decode(buf));
+            if(m && m.photos){ fmSaveShop(m.shopId); m = m.photos; }
             if(m && Object.keys(m).length){ fmPhotos = m; fmSavePhotos(); }
           }catch(e){}
         })
@@ -1442,9 +1443,11 @@ var fmBytes = null, fmParsed = null, fmAt = 0;
 var fmPhotos = (function(){
   try{ return JSON.parse(localStorage.getItem('nesage-fm-photos') || '{}'); }catch(e){ return {}; }
 })();
+var fmShopId = localStorage.getItem('nesage-fm-shop') || '';
 function fmSavePhotos(){
   try{ localStorage.setItem('nesage-fm-photos', JSON.stringify(fmPhotos)); }catch(e){}
 }
+function fmSaveShop(id){ if(id){ fmShopId = id; localStorage.setItem('nesage-fm-shop', id); } }
 var fmChanges = {};
 var fmSort = 'new', fmOnlyOld = false, fmOnlyChanged = false, fmQuery = '';
 var fmVisible = [], fmRendered = 0;
@@ -1502,6 +1505,7 @@ function fmCloudUpdate(){
       var u8 = new Uint8Array(bin.length);
       for(var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
       if(res.photos && Object.keys(res.photos).length){ fmPhotos = res.photos; fmSavePhotos(); }
+      fmSaveShop(res.shopId);
       var r2 = fmIngest(u8, Date.now());
       toast('フリマル ' + r2.count + '件 取り込みました' + (r2.dropped ? '（対象外の変更' + r2.dropped + '件は削除）' : ''));
     })
@@ -1584,7 +1588,7 @@ function fmCardHTML(it){
         '自動値下げ ' + (autoOn ? 'ON' : 'OFF') + '</button>' +
     '</div>' +
     '<div class="actions">' +
-      '<button class="abtn offers" data-act="fmopen">メルカリで見る</button>' +
+      '<button class="abtn offers" data-act="fmopen">' + (fmShopId ? '商品ページ' : 'メルカリで探す') + '</button>' +
       '<button class="abtn" data-act="fmminus100">−100</button>' +
       (hasChange ? '<button class="abtn undo" data-act="fmundo">取消</button>' : '') +
     '</div>' +
@@ -1651,7 +1655,11 @@ $('fmList').addEventListener('click', function(e){
   if(!it) return;
   var act = btn.getAttribute('data-act');
   if(act === 'fmopen'){
-    window.open('https://jp.mercari.com/search?keyword=' + encodeURIComponent(it.name.slice(0, 30)), '_blank');
+    // 店舗IDが分かっていれば、その商品の編集ページへ直行する
+    var url = fmShopId
+      ? 'https://mercari-shops.com/seller/shops/' + encodeURIComponent(fmShopId) + '/products/' + encodeURIComponent(it.id) + '/edit'
+      : 'https://jp.mercari.com/search?keyword=' + encodeURIComponent(it.name.slice(0, 30));
+    window.open(url, '_blank');
     return;
   }
   if(act === 'fmminus100'){
