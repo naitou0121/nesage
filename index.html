@@ -50,6 +50,20 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   background:var(--red);color:#fff;font-size:.7rem;font-weight:700;line-height:19px;text-align:center;
 }
 .filemeta{font-size:.72rem;color:#fff8ec;margin-top:4px;min-height:1em;opacity:.95}
+.sitetab{display:flex;gap:0;margin:8px -14px -8px;border-top:1px solid rgba(255,255,255,.35)}
+.sitetab button{
+  flex:1;min-height:40px;font-size:.9rem;font-weight:800;color:rgba(255,255,255,.82);
+  position:relative;transition:background .15s;
+}
+.sitetab button:first-child{border-right:1px solid rgba(255,255,255,.3)}
+.sitetab button.on{background:var(--bg);color:var(--orange-deep)}
+.sitetab button:active{background:rgba(255,255,255,.2)}
+.sitetab button.on:active{background:var(--bg)}
+[hidden]{display:none !important}
+.tabbadge{
+  display:inline-block;margin-left:5px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;
+  background:var(--red);color:#fff;font-size:.66rem;font-weight:800;line-height:18px;vertical-align:1px;
+}
 
 /* ---------- コントロール ---------- */
 .controls{padding:10px 12px 4px;display:flex;flex-direction:column;gap:8px}
@@ -99,6 +113,8 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
 }
 .ctitle:active{opacity:.6}
+.ctitle.fm{color:var(--text);cursor:default}
+.ctitle.fm:active{opacity:1}
 .csub{font-size:.68rem;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tagrow{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:5px}
 .tg{font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid transparent}
@@ -282,8 +298,13 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
     <button class="hbtn" id="exportBtn" disabled>反映<span class="badge" id="chgBadge" hidden>0</span></button>
   </div>
   <div class="filemeta" id="fileMeta"></div>
+  <div class="sitetab" id="siteTab">
+    <button data-site="pricetar" class="on">プライスター</button>
+    <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
+  </div>
 </header>
 
+<div id="ptPane">
 <div class="controls" id="controls" hidden>
   <div class="seg" id="segCond">
     <button data-v="all" class="on">すべて</button>
@@ -310,6 +331,28 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   </div>
 </div>
 <div id="moreSentinel"></div>
+</div>
+
+<div id="fmPane" hidden>
+  <div class="controls" id="fmControls" hidden>
+    <div class="chiprow">
+      <button class="chip on" id="fmSortChip">新しい順</button>
+      <button class="chip" id="fmOldChip">90日超</button>
+      <button class="chip" id="fmChangedChip">変更のみ</button>
+    </div>
+    <div class="searchwrap"><input class="search" id="fmSearch" type="search" placeholder="商品名で検索" autocomplete="off"></div>
+    <div class="stats" id="fmStats"></div>
+  </div>
+  <div id="fmList">
+    <div class="empty" id="fmEmptyMsg">
+      <span class="big">🛍️</span>
+      フリマルの商品データがまだありません。<br>
+      右上の「<b>☁️ 更新</b>」を押すと取り込めます。<br><br>
+      公開中・在庫ありの商品が対象です。
+    </div>
+  </div>
+  <div id="fmMoreSentinel"></div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -377,6 +420,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 <input type="file" id="fileInput" accept=".csv,text/csv" hidden>
 
 <script src="./csv-core.js"></script>
+<script src="./furimaru-core.js"></script>
 <script>
 (function(){
 'use strict';
@@ -505,6 +549,11 @@ function decryptBlob(blob, passphrase){
 
 $('cloudBtn').addEventListener('click', function(){
   var btn = this;
+  if(site === 'furimaru'){
+    btn.disabled = true;
+    fmCloudUpdate().finally(function(){ btn.disabled = false; });
+    return;
+  }
   btn.disabled = true;
   fetch(DATA_URL, { cache: 'no-store' })
     .then(function(r){
@@ -724,10 +773,21 @@ function refresh(){
 }
 
 function updateHeader(){
-  var n = Object.keys(changes).length;
+  var ptN = Object.keys(changes).length;
+  var fmN = Object.keys(fmChanges).length;
+  var n = (site === 'furimaru') ? fmN : ptN;
   $('chgBadge').hidden = n === 0;
   $('chgBadge').textContent = n;
-  $('exportBtn').disabled = !parsed || n === 0;
+  $('fmTabBadge').hidden = fmN === 0;
+  $('fmTabBadge').textContent = fmN;
+  if(site === 'furimaru'){
+    $('exportBtn').disabled = !fmParsed || fmN === 0;
+    $('fileMeta').textContent = fmParsed
+      ? 'フリマル ' + new Date(fmAt).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) + ' 取得・' + fmParsed.items.length + '件'
+      : 'フリマル：データ未取得';
+    return;
+  }
+  $('exportBtn').disabled = !parsed || ptN === 0;
   $('fileMeta').textContent = parsed
     ? (fileSource || fileName + ' ' + new Date(importedAt).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) + ' 読込') + '・' + parsed.items.length + '件'
     : '';
@@ -1084,7 +1144,24 @@ function changeSummaryHTML(){
   return out.join('') || '<div class="arow"><span class="an">変更なし</span></div>';
 }
 
+function fmChangeSummaryHTML(){
+  var out = [];
+  Object.keys(fmChanges).forEach(function(id){
+    var it = fmParsed.items.find(function(x){ return x.id === id; });
+    if(!it) return;
+    var c = fmChanges[id];
+    var bits = [];
+    if(c.price != null && c.price !== '') bits.push('販売価格 ' + yen(it.price) + '→<span class="newv">' + yen(c.price) + '</span>');
+    if(c.akaji != null && c.akaji !== '') bits.push('赤字STOP ' + yen(it.akaji) + '→<span class="newv">' + yen(c.akaji) + '</span>');
+    if(c.autoDown != null) bits.push('自動値下げ→<span class="newv">' + (c.autoDown ? 'ON' : 'OFF') + '</span>');
+    if(!bits.length) return;
+    out.push('<div class="arow"><span class="an">' + esc(it.name.slice(0, 20)) + '</span><span class="av">' + bits.join(' / ') + '</span></div>');
+  });
+  return out.join('') || '<div class="arow"><span class="an">変更なし</span></div>';
+}
+
 function openSheet(){
+  if(site === 'furimaru') return openFmSheet();
   var n = Object.keys(changes).length;
   $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（10秒ほど）。';
   $('sheetDesc').hidden = false;
@@ -1169,7 +1246,79 @@ function showApplyResult(res, err){
   $('closeSheet').textContent = '閉じる';
 }
 
+function openFmSheet(){
+  var n = Object.keys(fmChanges).length;
+  $('sheetDesc').textContent = '変更' + n + '件をフリマルに反映します。フリマル側の処理に数分かかります。';
+  $('sheetDesc').hidden = false;
+  $('applyStatus').hidden = true;
+  $('applyStatus').innerHTML = '';
+  $('applyList').hidden = false;
+  $('applyList').innerHTML = fmChangeSummaryHTML();
+  $('doApply').hidden = false;
+  $('doApply').disabled = n === 0;
+  $('doApply').textContent = 'この内容で反映する';
+  $('doExport').hidden = true;         // フリマルはCSV書き出しなし
+  $('clearChanges').hidden = false;
+  $('closeSheet').textContent = '閉じる';
+  $('sheet').classList.remove('applying');
+  $('sheetBack').classList.add('show');
+  $('sheet').classList.add('show');
+}
+
+function fmDoApply(){
+  var n = Object.keys(fmChanges).length;
+  if(!n) return;
+  var pass = localStorage.getItem(LS_PASS);
+  if(!pass){ toast('先にプライスタータブで「☁️ 更新」して合言葉を入れてください'); return; }
+  if(!confirm('フリマルに ' + n + ' 件を反映します。よろしいですか？')) return;
+  var sent = fmChanges;
+  var btn = $('doApply');
+  btn.disabled = true;
+  btn.textContent = '反映中…';
+  $('sheet').classList.add('applying');
+  lastApplyKinds = { price: false, stopper: false };
+  showApplyProgress(n);
+  fetch(APPLY_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pass: pass, site: 'furimaru', changes: sent }),
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res.error) throw new Error(res.error);
+      try{
+        var out = FM.buildExport(fmBytes, fmParsed, sent, false);
+        fmBytes = out.bytes;
+        fmParsed = FM.parseFile(fmBytes);
+        idbPut('fm-file', { bytes: fmBytes, at: fmAt });
+      }catch(e){}
+      fmChanges = {};
+      fmSaveChanges();
+      fmRefresh();
+      clearInterval(applyTimer);
+      $('sheetDesc').hidden = true;
+      $('applyList').hidden = true;
+      $('doApply').hidden = true;
+      $('clearChanges').hidden = true;
+      $('sheet').classList.remove('applying');
+      $('applyStatus').innerHTML =
+        '<div class="applybox ok">' +
+          '<div class="applybig">✅</div>' +
+          '<div class="applyres ok">フリマルに送信しました</div>' +
+          '<div class="applynote"><b>' + res.applied + '件</b>を受け付けました<br><br>' +
+            'フリマル側の反映まで<b>数分かかります</b>。<br>' +
+            'しばらくしてから「☁️ 更新」を押すと、反映後の状態を確認できます。' +
+          '</div>' +
+        '</div>';
+    })
+    .catch(function(e){
+      showApplyResult(null, e.message || '通信に失敗しました');
+      btn.disabled = false;
+      btn.textContent = 'この内容で反映する';
+    });
+}
+
 $('doApply').addEventListener('click', function(){
+  if(site === 'furimaru') return fmDoApply();
   var n = Object.keys(changes).length;
   if(!n) return;
   var pass = localStorage.getItem('nesage-pass');
@@ -1251,20 +1400,313 @@ $('doExport').addEventListener('click', function(){
 });
 
 $('clearChanges').addEventListener('click', function(){
-  var n = Object.keys(changes).length;
+  var isFm = site === 'furimaru';
+  var n = Object.keys(isFm ? fmChanges : changes).length;
   if(!n) { closeSheet(); return; }
   if(confirm('保留中の変更 ' + n + ' 件をすべて取り消しますか？')){
-    changes = {};
-    saveChanges();
-    closeSheet();
-    refresh();
+    if(isFm){ fmChanges = {}; fmSaveChanges(); closeSheet(); fmRefresh(); }
+    else { changes = {}; saveChanges(); closeSheet(); refresh(); }
     toast('変更を取り消しました');
   }
 });
 
+/* ================= フリマル ================= */
+var FM = window.FuriCore;
+var fmBytes = null, fmParsed = null, fmAt = 0;
+var fmChanges = {};
+var fmSort = 'new', fmOnlyOld = false, fmOnlyChanged = false, fmQuery = '';
+var fmVisible = [], fmRendered = 0;
+var site = localStorage.getItem('nesage-site') || 'pricetar';
+
+function fmLoadChanges(){
+  try{ fmChanges = JSON.parse(localStorage.getItem('nesage-fm-changes') || '{}'); }catch(e){ fmChanges = {}; }
+}
+function fmSaveChanges(){ localStorage.setItem('nesage-fm-changes', JSON.stringify(fmChanges)); }
+
+/* ---------- タブ切替 ---------- */
+function setSite(next){
+  site = next;
+  localStorage.setItem('nesage-site', site);
+  document.querySelectorAll('#siteTab button').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-site') === site);
+  });
+  $('ptPane').hidden = site !== 'pricetar';
+  $('fmPane').hidden = site !== 'furimaru';
+  $('importBtn').hidden = site !== 'pricetar';   // フリマルはクラウド取得のみ
+  updateHeader();
+  if(site === 'furimaru') fmRefresh(); else refresh();
+  window.scrollTo(0, 0);
+}
+$('siteTab').addEventListener('click', function(e){
+  var b = e.target.closest('button');
+  if(b) setSite(b.getAttribute('data-site'));
+});
+
+/* ---------- 取り込み ---------- */
+function fmIngest(u8, at){
+  var p = FM.parseFile(u8);
+  fmBytes = u8; fmParsed = p; fmAt = at || Date.now();
+  idbPut('fm-file', { bytes: u8, at: fmAt });
+  var known = {};
+  p.items.forEach(function(it){ known[it.id] = 1; });
+  var dropped = 0;
+  Object.keys(fmChanges).forEach(function(k){ if(!known[k]){ delete fmChanges[k]; dropped++; } });
+  if(dropped) fmSaveChanges();
+  fmRefresh();
+  return { count: p.items.length, dropped: dropped };
+}
+
+function fmCloudUpdate(){
+  var pass = localStorage.getItem(LS_PASS);
+  if(!pass){ toast('先にプライスタータブで「☁️ 更新」して合言葉を入れてください'); return Promise.resolve(); }
+  return fetch(APPLY_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pass: pass, site: 'furimaru', action: 'fetch' }),
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res.error) throw new Error(res.error);
+      var bin = atob(res.csv);
+      var u8 = new Uint8Array(bin.length);
+      for(var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      var r2 = fmIngest(u8, Date.now());
+      toast('フリマル ' + r2.count + '件 取り込みました' + (r2.dropped ? '（対象外の変更' + r2.dropped + '件は削除）' : ''));
+    })
+    .catch(function(e){ toast('フリマルの取り込みに失敗：' + (e.message || '')); });
+}
+
+/* ---------- 一覧 ---------- */
+function fmCompute(){
+  if(!fmParsed) return [];
+  var items = fmParsed.items.filter(function(it){
+    if(fmOnlyChanged && !fmChanges[it.id]) return false;
+    if(fmOnlyOld){
+      var d = daysSince(it.dateStr);
+      if(d == null || d < 90) return false;
+    }
+    if(fmQuery && it.name.toLowerCase().indexOf(fmQuery) === -1) return false;
+    return true;
+  });
+  items.sort(function(a, b){
+    if(fmSort === 'priceHigh') return b.price - a.price;
+    if(fmSort === 'priceLow') return a.price - b.price;
+    var da = a.dateStr || '00000000', db = b.dateStr || '00000000';
+    if(fmSort === 'old'){ if(da === db) return 0; return da < db ? -1 : 1; }
+    if(da === db) return 0;
+    return da > db ? -1 : 1;
+  });
+  return items;
+}
+
+function fmFieldVal(it, f){
+  var c = fmChanges[it.id];
+  return (c && c[f] != null && c[f] !== '') ? c[f] : it[f];
+}
+
+function fmCardHTML(it){
+  var chg = fmChanges[it.id] || {};
+  var hasChange = Object.keys(chg).length > 0;
+  var days = daysSince(it.dateStr);
+  var dateHtml = it.dateStr
+    ? '<span class="cdate">' + (+it.dateStr.slice(4,6)) + '/' + (+it.dateStr.slice(6,8)) +
+      ' · <span class="days' + (days >= 90 ? ' old' : '') + '">' + days + '日</span></span>'
+    : '<span class="cdate">日付不明</span>';
+  function cell(field, label, aim){
+    var dirty = chg[field] != null && chg[field] !== '';
+    var v = dirty ? chg[field] : it[field];
+    return '<div class="pcell' + (aim ? ' aim' : '') + '">' +
+      '<div class="plabel">' + label + (aim ? ' ▼' : '') + '</div>' +
+      '<input class="pin' + (dirty ? ' dirty' : '') + '" type="text" inputmode="numeric" pattern="[0-9]*"' +
+        ' data-field="' + field + '" value="' + v + '" aria-label="' + label + '">' +
+      '<div class="porig">' + (dirty ? '元' + (it[field] === 0 ? '－' : yen(it[field])) : '') + '</div>' +
+    '</div>';
+  }
+  var autoOn = (chg.autoDown != null) ? !!chg.autoDown : (it.autoDown === 'on');
+  var autoDirty = chg.autoDown != null;
+  var profit = fmFieldVal(it, 'price') - it.cost - it.shipping - Math.round(fmFieldVal(it, 'price') * 0.1);
+  var profitCls = profit < 0 ? ' class="minus"' : '';
+  var pct = fmFieldVal(it, 'price') > 0 ? ' (' + Math.round(profit / fmFieldVal(it, 'price') * 100) + '%)' : '';
+  return '<div class="card' + (hasChange ? ' changed' : '') + '" data-id="' + esc(it.id) + '">' +
+    '<div class="ctop">' +
+      '<div class="cmain">' +
+        '<div class="ctitle fm">' + esc(it.name) + '</div>' +
+        '<div class="tagrow">' +
+          '<span class="tg tg-cond">' + (FM.STATUS_LABEL[it.status] || '') + '</span>' +
+          (it.qty > 1 ? '<span class="tg tg-cond">' + it.qty + '個</span>' : '') +
+          (it.code ? '<span class="tg tg-cond">' + esc(it.code) + '</span>' : '') +
+          dateHtml +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="pgrid">' +
+      cell('price', '販売価格', true) +
+      cell('akaji', '赤字STOP', false) +
+    '</div>' +
+    '<div class="metaline">' +
+      '仕入 <span class="cost">' + yen(it.cost) + '</span>' +
+      ' · 利益 <b' + profitCls + '>' + yen(profit) + pct + '</b>' +
+      '<button class="tracebtn' + (autoDirty ? ' dirty' : (autoOn ? ' aim' : '')) + '" data-act="fmauto">' +
+        '自動値下げ ' + (autoOn ? 'ON' : 'OFF') + '</button>' +
+    '</div>' +
+    '<div class="actions">' +
+      '<button class="abtn offers" data-act="fmopen">メルカリで見る</button>' +
+      '<button class="abtn" data-act="fmminus100">−100</button>' +
+      (hasChange ? '<button class="abtn undo" data-act="fmundo">取消</button>' : '') +
+    '</div>' +
+  '</div>';
+}
+
+function fmRenderMore(){
+  if(!fmVisible.length || fmRendered >= fmVisible.length) return;
+  var frag = [];
+  var end = Math.min(fmRendered + CHUNK, fmVisible.length);
+  for(var i = fmRendered; i < end; i++) frag.push(fmCardHTML(fmVisible[i]));
+  $('fmList').insertAdjacentHTML('beforeend', frag.join(''));
+  fmRendered = end;
+}
+
+function fmRefresh(){
+  if(site !== 'furimaru') { updateHeader(); return; }
+  if(!fmParsed){
+    $('fmControls').hidden = true;
+    $('fmList').innerHTML = '<div class="empty"><span class="big">🛍️</span>' +
+      'フリマルの商品データがまだありません。<br>右上の「<b>☁️ 更新</b>」を押すと取り込めます。<br><br>公開中・在庫ありの商品が対象です。</div>';
+    updateHeader();
+    return;
+  }
+  $('fmControls').hidden = false;
+  fmVisible = fmCompute();
+  fmRendered = 0;
+  $('fmList').innerHTML = fmVisible.length ? '' : '<div class="empty"><span class="big">🔍</span>該当する商品がありません</div>';
+  fmRenderMore();
+  var oldN = fmParsed.items.filter(function(it){ var d = daysSince(it.dateStr); return d != null && d >= 90; }).length;
+  $('fmStats').textContent = '表示 ' + fmVisible.length + ' / 全' + fmParsed.items.length + '件 · 90日超' + oldN;
+  updateHeader();
+}
+
+function fmUpdateCard(id){
+  var sel = '.card[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]';
+  var el = document.querySelector(sel);
+  var it = fmParsed.items.find(function(x){ return x.id === id; });
+  if(el && it){
+    var tmp = document.createElement('div');
+    tmp.innerHTML = fmCardHTML(it);
+    el.replaceWith(tmp.firstChild);
+  }
+  updateHeader();
+}
+
+function fmSetField(it, field, val){
+  var c = fmChanges[it.id] || {};
+  if(field === 'autoDown'){
+    if(!!val === (it.autoDown === 'on')) delete c.autoDown; else c.autoDown = !!val;
+  } else {
+    if(String(val) === String(it[field])) delete c[field]; else c[field] = val;
+  }
+  if(Object.keys(c).length) fmChanges[it.id] = c; else delete fmChanges[it.id];
+  fmSaveChanges();
+}
+
+/* 操作 */
+$('fmList').addEventListener('click', function(e){
+  var btn = e.target.closest('[data-act]');
+  if(!btn) return;
+  var card = btn.closest('.card');
+  var it = fmParsed.items.find(function(x){ return x.id === card.getAttribute('data-id'); });
+  if(!it) return;
+  var act = btn.getAttribute('data-act');
+  if(act === 'fmopen'){
+    window.open('https://jp.mercari.com/search?keyword=' + encodeURIComponent(it.name.slice(0, 30)), '_blank');
+    return;
+  }
+  if(act === 'fmminus100'){
+    var cur = fmFieldVal(it, 'price');
+    fmSetField(it, 'price', Math.max(0, cur - 100));
+    fmUpdateCard(it.id);
+    return;
+  }
+  if(act === 'fmauto'){
+    var now = (fmChanges[it.id] && fmChanges[it.id].autoDown != null) ? fmChanges[it.id].autoDown : (it.autoDown === 'on');
+    fmSetField(it, 'autoDown', !now);
+    fmUpdateCard(it.id);
+    return;
+  }
+  if(act === 'fmundo'){
+    delete fmChanges[it.id];
+    fmSaveChanges();
+    fmUpdateCard(it.id);
+    return;
+  }
+});
+$('fmList').addEventListener('input', function(e){
+  var inp = e.target.closest('.pin');
+  if(!inp) return;
+  var card = inp.closest('.card');
+  var it = fmParsed.items.find(function(x){ return x.id === card.getAttribute('data-id'); });
+  if(!it) return;
+  var field = inp.getAttribute('data-field');
+  var v = parseInt(String(inp.value).replace(/[^0-9]/g, ''), 10);
+  if(isNaN(v)) return;
+  fmSetField(it, field, v);
+  inp.classList.toggle('dirty', v !== it[field]);
+  var orig = inp.parentNode.querySelector('.porig');
+  if(orig) orig.textContent = (v !== it[field]) ? '元' + (it[field] === 0 ? '－' : yen(it[field])) : '';
+  card.classList.toggle('changed', Object.keys(fmChanges[it.id] || {}).length > 0);
+  updateHeader();
+});
+$('fmList').addEventListener('focusout', function(e){
+  var inp = e.target.closest('.pin');
+  if(!inp) return;
+  var card = inp.closest('.card');
+  var it = fmParsed.items.find(function(x){ return x.id === card.getAttribute('data-id'); });
+  if(!it) return;
+  var v = parseInt(String(inp.value).replace(/[^0-9]/g, ''), 10);
+  if(isNaN(v)){
+    var c = fmChanges[it.id] || {};
+    delete c[inp.getAttribute('data-field')];
+    if(Object.keys(c).length) fmChanges[it.id] = c; else delete fmChanges[it.id];
+    fmSaveChanges();
+  }
+  fmUpdateCard(it.id);
+});
+
+/* 絞り込み */
+var FM_SORTS = [['new','新しい順'],['old','古い順'],['priceHigh','価格が高い順'],['priceLow','価格が安い順']];
+$('fmSortChip').addEventListener('click', function(){
+  var i = FM_SORTS.findIndex(function(s){ return s[0] === fmSort; });
+  var next = FM_SORTS[(i + 1) % FM_SORTS.length];
+  fmSort = next[0]; this.textContent = next[1]; fmRefresh();
+});
+$('fmOldChip').addEventListener('click', function(){
+  fmOnlyOld = !fmOnlyOld; this.classList.toggle('on', fmOnlyOld); fmRefresh();
+});
+$('fmChangedChip').addEventListener('click', function(){
+  fmOnlyChanged = !fmOnlyChanged; this.classList.toggle('on', fmOnlyChanged); fmRefresh();
+});
+var fmSearchTimer = null;
+$('fmSearch').addEventListener('input', function(){
+  var v = this.value;
+  clearTimeout(fmSearchTimer);
+  fmSearchTimer = setTimeout(function(){ fmQuery = v.trim().toLowerCase(); fmRefresh(); }, 200);
+});
+new IntersectionObserver(function(entries){
+  if(entries[0].isIntersecting) fmRenderMore();
+}, { rootMargin: '600px' }).observe($('fmMoreSentinel'));
+
 /* ---------- 起動 ---------- */
 loadChanges();
-idbGet('file').then(function(saved){
+fmLoadChanges();
+idbGet('fm-file').then(function(saved){
+  if(saved && saved.bytes){
+    try{
+      fmBytes = saved.bytes instanceof Uint8Array ? saved.bytes : new Uint8Array(saved.bytes);
+      fmAt = saved.at;
+      fmParsed = FM.parseFile(fmBytes);
+    }catch(e){ fmBytes = null; fmParsed = null; }
+  }
+}).catch(function(){}).then(function(){
+  return idbGet('file');
+}).then(function(saved){
   if(saved && saved.bytes){
     try{
       fileBytes = saved.bytes instanceof Uint8Array ? saved.bytes : new Uint8Array(saved.bytes);
@@ -1272,8 +1714,8 @@ idbGet('file').then(function(saved){
       parsed = CORE.parseFile(fileBytes);
     }catch(e){ fileBytes = null; parsed = null; }
   }
-  refresh();
-}).catch(function(){ refresh(); });
+  setSite(site);
+}).catch(function(){ setSite(site); });
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){

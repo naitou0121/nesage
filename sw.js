@@ -1,5 +1,5 @@
-const C="nesage-v10";
-const ASSETS=["./","./index.html","./csv-core.js","./manifest.webmanifest","./icon-180.png","./icon-192.png","./icon-512.png","./icon-512-maskable.png"];
+const C="nesage-v11";
+const ASSETS=["./","./index.html","./csv-core.js","./furimaru-core.js","./manifest.webmanifest","./icon-180.png","./icon-192.png","./icon-512.png","./icon-512-maskable.png"];
 self.addEventListener("install",function(e){e.waitUntil(caches.open(C).then(function(c){return c.addAll(ASSETS)}).then(function(){return self.skipWaiting()}))});
 self.addEventListener("activate",function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.map(function(k){if(k!==C)return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});
 self.addEventListener("fetch",function(e){
