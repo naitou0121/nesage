@@ -357,7 +357,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v17</div>
+  <div class="ver">v18</div>
 </header>
 
 <div id="ptPane">
@@ -460,10 +460,16 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
       <select class="lsinput" id="lsState"></select>
     </div>
 
-    <button class="lsbtn main" id="lsSave">下書きを保存</button>
+    <div class="lssec">
+      <div class="lslabel">販売価格 <span class="lsreq">出品する時は必須</span></div>
+      <input class="lsinput" id="lsPrice" type="number" inputmode="numeric" min="300" placeholder="例：1980">
+    </div>
+
+    <button class="lsbtn main" id="lsPublish">出品する</button>
+    <button class="lsbtn sub" id="lsSave">下書きだけ保存（出品はしない）</button>
     <button class="lsbtn sub" id="lsOpenStep2">フリマルの出品画面を開く</button>
     <button class="lsbtn warn" id="lsClear">入力をすべて消す</button>
-    <div class="lsnote" style="margin-top:10px">写真・入力内容はこの端末に自動保存されます。</div>
+    <div class="lsnote" style="margin-top:10px">「出品する」は確認のあとメルカリShopsに公開されます。写真・入力内容はこの端末に自動保存されます。</div>
   </div>
 </div>
 
@@ -1878,7 +1884,7 @@ var LS_DEFAULTS = {
 function lsBlank(keep){
   keep = keep || {};
   return {
-    photos: [], name: '', desc: LS_TEMPLATE,
+    photos: [], name: '', desc: LS_TEMPLATE, price: '',
     condition: keep.condition || LS_DEFAULTS.condition,
     category: keep.category || LS_DEFAULTS.category,
     shipping: keep.shipping || LS_DEFAULTS.shipping,
@@ -1968,6 +1974,7 @@ $('lsPhotos').addEventListener('click', function(e){
 });
 
 $('lsName').addEventListener('input', function(){ lsDraft.name = this.value; lsSave(); });
+$('lsPrice').addEventListener('input', function(){ lsDraft.price = this.value; lsSave(); });
 $('lsDesc').addEventListener('input', function(){ lsDraft.desc = this.value; lsSave(); });
 $('lsCondition').addEventListener('change', function(){ lsDraft.condition = this.value; lsSave(); });
 $('lsDuration').addEventListener('change', function(){ lsDraft.duration = this.value; lsSave(); });
@@ -2046,8 +2053,8 @@ $('lsShipping').addEventListener('change', function(){
   lsSave();
 });
 
-/* 保存（＝下書き作成。出品はされない） */
-$('lsSave').addEventListener('click', function(){
+/* 保存・出品の共通部品 */
+function lsMissing(){
   var missing = [];
   if(!lsDraft.photos.length) missing.push('写真');
   if(!lsDraft.name.trim()) missing.push('商品名');
@@ -2057,32 +2064,78 @@ $('lsSave').addEventListener('click', function(){
   if(!lsDraft.shipping) missing.push('配送方法');
   if(!lsDraft.duration) missing.push('発送までの日数');
   if(!lsDraft.state) missing.push('発送元の地域');
+  return missing;
+}
+function lsPayload(){
+  return {
+    itemName: lsDraft.name.trim(),
+    description: lsDraft.desc.trim(),
+    itemCondition: lsDraft.condition,
+    categoryId: lsDraft.category.id,
+    shippingMethod: lsDraft.shipping.id,
+    shippingDuration: lsDraft.duration,
+    shippingFromState: lsDraft.state,
+    images: lsDraft.photos,
+  };
+}
+
+/* 下書きだけ保存（出品はされない） */
+$('lsSave').addEventListener('click', function(){
+  var missing = lsMissing();
   if(missing.length){ toast('未入力：' + missing.join('・')); return; }
 
   var btn = this;
   btn.disabled = true;
   btn.textContent = '保存中…';
-  lsAsk('saveListing', {
-    listing: {
-      itemName: lsDraft.name.trim(),
-      description: lsDraft.desc.trim(),
-      itemCondition: lsDraft.condition,
-      categoryId: lsDraft.category.id,
-      shippingMethod: lsDraft.shipping.id,
-      shippingDuration: lsDraft.duration,
-      shippingFromState: lsDraft.state,
-      images: lsDraft.photos,
-    },
-  })
+  lsAsk('saveListing', { listing: lsPayload() })
     .then(function(){
-      toast('下書きを保存しました。フリマルのSTEP2から出品してください');
+      toast('下書きを保存しました。出品する時は「出品する」かフリマルのSTEP2から');
       if(confirm('下書きを保存しました。\n入力内容を消して次の商品に進みますか？')){
         lsDraft = lsBlank(lsDraft);
         lsSave(); lsRenderAll();
       }
     })
     .catch(function(e){ toast('保存できませんでした：' + (e.message || '')); })
-    .finally(function(){ btn.disabled = false; btn.textContent = '下書きを保存'; });
+    .finally(function(){ btn.disabled = false; btn.textContent = '下書きだけ保存（出品はしない）'; });
+});
+
+/* 出品する（保存→出品まで一気。公開される操作なので直前に必ず確認する） */
+var lsPendingSaved = false;   // 前回、保存だけ成功して出品で失敗した状態
+var lsPendingName = '';
+$('lsPublish').addEventListener('click', function(){
+  var missing = lsMissing();
+  var price = parseInt(String(lsDraft.price || '').replace(/[^0-9]/g, ''), 10) || 0;
+  if(price < 300) missing.push('販売価格（300円以上）');
+  if(missing.length){ toast('未入力：' + missing.join('・')); return; }
+  if(!confirm('フリマルに出品します。\n\n' + lsDraft.name.trim() + '\n販売価格 ¥' + price.toLocaleString() + '\n\nメルカリShopsに公開されます。よろしいですか？')) return;
+
+  var btn = this;
+  btn.disabled = true;
+  // 前回の出品失敗分を再実行する時は、内容が変わっていなければ保存を繰り返さない（下書きの重複を防ぐ）
+  var needSave = !(lsPendingSaved && lsPendingName === lsDraft.name.trim());
+  btn.textContent = needSave ? '下書きを保存中…' : '出品しています…';
+  (needSave ? lsAsk('saveListing', { listing: lsPayload() }) : Promise.resolve())
+    .then(function(){
+      lsPendingSaved = true;
+      lsPendingName = lsDraft.name.trim();
+      btn.textContent = '出品しています…';
+      return lsAsk('listDrafts', {});
+    })
+    .then(function(res){
+      var drafts = (res.drafts || []).slice().sort(function(a, b){ return Number(b.id) - Number(a.id); });
+      if(!drafts.length) throw new Error('保存した下書きが見つかりませんでした');
+      return lsAsk('publishListing', { itemId: drafts[0].id, price: price });
+    })
+    .then(function(r){
+      lsPendingSaved = false; lsPendingName = '';
+      toast('出品しました' + (r.sku ? '（SKU：' + r.sku + '）' : ''));
+      lsDraft = lsBlank(lsDraft);
+      lsSave(); lsRenderAll();
+    })
+    .catch(function(e){
+      toast('出品できませんでした：' + (e.message || '') + (lsPendingSaved ? '（下書きは保存済み。もう一度「出品する」で再実行できます）' : ''));
+    })
+    .finally(function(){ btn.disabled = false; btn.textContent = '出品する'; });
 });
 
 $('lsOpenStep2').addEventListener('click', function(){
@@ -2097,6 +2150,7 @@ $('lsClear').addEventListener('click', function(){
 function lsRenderAll(){
   lsRenderPhotos();
   $('lsName').value = lsDraft.name;
+  $('lsPrice').value = lsDraft.price || '';
   $('lsDesc').value = lsDraft.desc;
   fillSelect($('lsCondition'), LS_CONDITIONS, lsDraft.condition, '選択してください');
   fillSelect($('lsDuration'), LS_DURATIONS, lsDraft.duration, '選択してください');
