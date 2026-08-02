@@ -303,9 +303,11 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 .pslot.first{border-color:var(--orange);border-width:2px}
 .lssuggest{margin-top:6px;max-height:190px;overflow-y:auto}
 .lssuggest button{
-  display:block;width:100%;text-align:left;padding:9px 10px;font-size:.84rem;
+  display:block;width:100%;text-align:left;padding:9px 10px;
   border-bottom:1px solid #efe8d6;background:#fff;
 }
+.lssuggest .cname{display:block;font-size:.86rem;font-weight:700}
+.lssuggest .ctree{display:block;font-size:.68rem;color:var(--text2);margin-top:2px}
 .lssuggest button:active{background:var(--orange-pale)}
 .lspicked{margin-top:6px;font-size:.84rem;font-weight:700;color:var(--orange-deep);
   background:var(--orange-pale);border:1px solid var(--orange);border-radius:7px;padding:8px 11px}
@@ -355,7 +357,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v16</div>
+  <div class="ver">v17</div>
 </header>
 
 <div id="ptPane">
@@ -1865,12 +1867,23 @@ new IntersectionObserver(function(entries){
 
 /* ================= 出品タブ ================= */
 var LS_KEY = 'nesage-listing';
+/* いつも同じ値を使う項目は初期値として入れておく（変えたい時だけ触る） */
+var LS_DEFAULTS = {
+  condition: 'やや傷や汚れあり',
+  category: { id: '7YpkuT6dpuj2AdCV2K9jAY', name: '青年漫画', tree: '本・雑誌・漫画 ＞ 漫画 ＞ 青年漫画' },
+  shipping: { id: 'mercari_easy', name: 'らくらくメルカリ便' },
+  duration: '1～2日で発送',
+  state: '岐阜県',
+};
 function lsBlank(keep){
   keep = keep || {};
   return {
     photos: [], name: '', desc: LS_TEMPLATE,
-    condition: keep.condition || '', category: null,
-    shipping: keep.shipping || null, duration: keep.duration || '', state: keep.state || '',
+    condition: keep.condition || LS_DEFAULTS.condition,
+    category: keep.category || LS_DEFAULTS.category,
+    shipping: keep.shipping || LS_DEFAULTS.shipping,
+    duration: keep.duration || LS_DEFAULTS.duration,
+    state: keep.state || LS_DEFAULTS.state,
   };
 }
 var lsDraft = null;   // LS_TEMPLATE の定義後に初期化する
@@ -1995,7 +2008,12 @@ $('lsCatSearch').addEventListener('input', function(){
       .then(function(res){
         var list = res.items || [];
         $('lsCatList').innerHTML = list.length
-          ? list.map(function(c){ return '<button data-id="' + esc(c.id) + '" data-name="' + esc(c.name) + '">' + esc(c.name) + '</button>'; }).join('')
+          ? list.map(function(c){
+              return '<button data-id="' + esc(c.id) + '" data-name="' + esc(c.name) + '" data-tree="' + esc(c.tree || '') + '">' +
+                '<span class="cname">' + esc(c.name) + '</span>' +
+                (c.tree ? '<span class="ctree">' + esc(c.tree) + '</span>' : '') +
+              '</button>';
+            }).join('')
           : '<div class="oload" style="padding:12px 0">見つかりませんでした</div>';
       })
       .catch(function(e){ $('lsCatList').innerHTML = '<div class="oload" style="padding:12px 0">' + esc(e.message) + '</div>'; });
@@ -2003,9 +2021,9 @@ $('lsCatSearch').addEventListener('input', function(){
 });
 $('lsCatList').addEventListener('click', function(e){
   var b = e.target.closest('button'); if(!b) return;
-  lsDraft.category = { id: b.getAttribute('data-id'), name: b.getAttribute('data-name') };
+  lsDraft.category = { id: b.getAttribute('data-id'), name: b.getAttribute('data-name'), tree: b.getAttribute('data-tree') || '' };
   lsSave();
-  lsRenderPicked('lsCatPicked', lsDraft.category.name);
+  lsRenderPicked('lsCatPicked', lsDraft.category.tree || lsDraft.category.name);
   $('lsCatList').innerHTML = '';
   $('lsCatSearch').value = '';
 });
@@ -2083,7 +2101,7 @@ function lsRenderAll(){
   fillSelect($('lsCondition'), LS_CONDITIONS, lsDraft.condition, '選択してください');
   fillSelect($('lsDuration'), LS_DURATIONS, lsDraft.duration, '選択してください');
   fillSelect($('lsState'), LS_STATES, lsDraft.state, '選択してください');
-  lsRenderPicked('lsCatPicked', lsDraft.category && lsDraft.category.name);
+  lsRenderPicked('lsCatPicked', lsDraft.category && (lsDraft.category.tree || lsDraft.category.name));
   var shipEl = $('lsShipping');
   shipEl.innerHTML = '<option value="">選択してください</option>' +
     LS_SHIPPING.map(function(x){
