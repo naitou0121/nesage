@@ -56,7 +56,9 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   flex:1;min-height:40px;font-size:.9rem;font-weight:800;color:rgba(255,255,255,.82);
   position:relative;transition:background .15s;
 }
-.sitetab button:first-child{border-right:1px solid rgba(255,255,255,.3)}
+.sitetab button{border-right:1px solid rgba(255,255,255,.3)}
+.sitetab button:last-child{border-right:none}
+.sitetab button{font-size:.84rem}
 .sitetab button.on{background:var(--bg);color:var(--orange-deep)}
 .sitetab button:active{background:rgba(255,255,255,.2)}
 .sitetab button.on:active{background:var(--bg)}
@@ -259,6 +261,52 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 }
 .daysrow span{font-size:.85rem;color:var(--text2)}
 
+/* ---------- 出品タブ ---------- */
+.lsbody{padding:12px 12px 100px}
+.lsnote{font-size:.76rem;color:var(--text2);line-height:1.7;background:var(--yellow-pale);
+  border:1px solid var(--yellow-line);border-radius:8px;padding:9px 11px;margin-bottom:14px}
+.lssec{margin-bottom:16px}
+.lslabel{font-size:.82rem;font-weight:800;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.lsreq{font-size:.64rem;font-weight:700;background:var(--pink-pale);color:var(--pink);
+  border:1px solid #efc3d6;border-radius:4px;padding:1px 5px}
+.lscount{margin-left:auto;font-size:.72rem;font-weight:600;color:var(--text2)}
+.lsinput{
+  width:100%;min-height:44px;border-radius:8px;border:1.5px solid var(--line);background:#fff;
+  padding:10px 12px;font-size:16px;color:var(--text);outline:none;line-height:1.6;
+}
+.lsinput:focus{border-color:var(--orange);box-shadow:0 0 0 2px var(--orange-pale)}
+textarea.lsinput{resize:vertical}
+select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--text2) 50%),linear-gradient(135deg,var(--text2) 50%,transparent 50%);
+  background-position:calc(100% - 18px) 20px,calc(100% - 13px) 20px;background-size:5px 5px;background-repeat:no-repeat}
+.lsbtn{
+  width:100%;min-height:46px;border-radius:8px;font-size:.9rem;font-weight:800;margin-top:8px;
+  background:#fff;border:1.5px solid var(--orange);color:var(--orange-deep);
+  transition:transform .1s ease-out;
+}
+.lsbtn:active{transform:scale(.98)}
+.lsbtn.main{background:var(--orange);color:#fff;min-height:52px;font-size:1rem;margin-top:20px}
+.lsbtn.sub{border-color:var(--line);color:var(--text2)}
+.lsbtn.warn{border-color:#e0a8a4;color:var(--red)}
+.lsbtn:disabled{opacity:.45}
+.photogrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.pslot{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden;background:#f1ece0;border:1px solid var(--line)}
+.pslot img{width:100%;height:100%;object-fit:cover;display:block}
+.pslot .del{
+  position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:11px;
+  background:rgba(0,0,0,.62);color:#fff;font-size:.8rem;font-weight:800;line-height:22px;text-align:center;
+}
+.pslot .num{position:absolute;left:3px;bottom:2px;font-size:.6rem;font-weight:800;color:#fff;
+  background:rgba(0,0,0,.55);border-radius:3px;padding:0 4px}
+.pslot.first{border-color:var(--orange);border-width:2px}
+.lssuggest{margin-top:6px;max-height:190px;overflow-y:auto}
+.lssuggest button{
+  display:block;width:100%;text-align:left;padding:9px 10px;font-size:.84rem;
+  border-bottom:1px solid #efe8d6;background:#fff;
+}
+.lssuggest button:active{background:var(--orange-pale)}
+.lspicked{margin-top:6px;font-size:.84rem;font-weight:700;color:var(--orange-deep);
+  background:var(--orange-pale);border:1px solid var(--orange);border-radius:7px;padding:8px 11px}
+
 /* ---------- Keepaグラフの小窓 ---------- */
 .graphwrap{margin-bottom:10px;min-height:180px}
 .graphimg{width:100%;border:1px solid var(--line);border-radius:6px;background:#faf6ec;min-height:180px;object-fit:contain}
@@ -302,6 +350,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   <div class="sitetab" id="siteTab">
     <button data-site="pricetar" class="on">プライスター</button>
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
+    <button data-site="listing">出品</button>
   </div>
 </header>
 
@@ -353,6 +402,63 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
     </div>
   </div>
   <div id="fmMoreSentinel"></div>
+</div>
+
+<div id="lsPane" hidden>
+  <div class="lsbody">
+    <div class="lsnote">写真を選んで内容を書いたら「下書きを保存」。<b>この時点では出品されません。</b><br>
+      最後にフリマルの「STEP2. 出品画面」から出品してください。</div>
+
+    <div class="lssec">
+      <div class="lslabel">商品の写真 <span class="lsreq">必須</span><span class="lscount" id="lsPhotoCount"></span></div>
+      <div class="photogrid" id="lsPhotos"></div>
+      <input type="file" id="lsFileInput" accept="image/*" multiple hidden>
+      <button class="lsbtn sub" id="lsAddPhoto">写真を追加</button>
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">商品名 <span class="lsreq">必須</span></div>
+      <textarea class="lsinput" id="lsName" rows="2" placeholder="例：BLACK TORCH ブラックトーチ (1-5巻) 全5巻セット"></textarea>
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">商品の説明 <span class="lsreq">必須</span></div>
+      <textarea class="lsinput" id="lsDesc" rows="6" placeholder="状態や付属品などを書いてください"></textarea>
+      <button class="lsbtn sub" id="lsTemplate">定型文を入れる</button>
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">商品の状態 <span class="lsreq">必須</span></div>
+      <select class="lsinput" id="lsCondition"></select>
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">カテゴリー <span class="lsreq">必須</span></div>
+      <input class="lsinput" id="lsCatSearch" type="search" placeholder="例：青年漫画" autocomplete="off">
+      <div class="lspicked" id="lsCatPicked" hidden></div>
+      <div class="lssuggest" id="lsCatList"></div>
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">配送方法 <span class="lsreq">必須</span></div>
+      <select class="lsinput" id="lsShipping"></select>
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">発送までの日数 <span class="lsreq">必須</span></div>
+      <select class="lsinput" id="lsDuration"></select>
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">発送元の地域 <span class="lsreq">必須</span></div>
+      <select class="lsinput" id="lsState"></select>
+    </div>
+
+    <button class="lsbtn main" id="lsSave">下書きを保存</button>
+    <button class="lsbtn sub" id="lsOpenStep2">フリマルの出品画面を開く</button>
+    <button class="lsbtn warn" id="lsClear">入力をすべて消す</button>
+    <div class="lsnote" style="margin-top:10px">写真・入力内容はこの端末に自動保存されます。</div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -798,6 +904,13 @@ function refresh(){
 function updateHeader(){
   var ptN = Object.keys(changes).length;
   var fmN = Object.keys(fmChanges).length;
+  if(site === 'listing'){
+    $('chgBadge').hidden = true;
+    $('fmTabBadge').hidden = fmN === 0;
+    $('fmTabBadge').textContent = fmN;
+    $('fileMeta').textContent = 'フリマルへの出品（下書き作成）';
+    return;
+  }
   var n = (site === 'furimaru') ? fmN : ptN;
   $('chgBadge').hidden = n === 0;
   $('chgBadge').textContent = n;
@@ -1467,9 +1580,13 @@ function setSite(next){
   });
   $('ptPane').hidden = site !== 'pricetar';
   $('fmPane').hidden = site !== 'furimaru';
+  $('lsPane').hidden = site !== 'listing';
   $('importBtn').hidden = site !== 'pricetar';   // フリマルはクラウド取得のみ
+  $('cloudBtn').hidden = site === 'listing';
+  $('exportBtn').hidden = site === 'listing';
   updateHeader();
-  if(site === 'furimaru') fmRefresh(); else refresh();
+  if(site === 'furimaru') fmRefresh();
+  else if(site === 'pricetar') refresh();
   window.scrollTo(0, 0);
 }
 $('siteTab').addEventListener('click', function(e){
@@ -1736,9 +1853,231 @@ new IntersectionObserver(function(entries){
   if(entries[0].isIntersecting) fmRenderMore();
 }, { rootMargin: '600px' }).observe($('fmMoreSentinel'));
 
+/* ================= 出品タブ ================= */
+var LS_KEY = 'nesage-listing';
+var lsDraft = { photos: [], name: '', desc: '', condition: '', category: null, shipping: null, duration: '', state: '' };
+try{
+  var saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+  if(saved) lsDraft = Object.assign(lsDraft, saved);
+}catch(e){}
+
+var LS_CONDITIONS = ['新品・未使用','未使用に近い','目立った傷や汚れなし','やや傷や汚れあり','傷や汚れあり','全体的に状態が悪い'];
+var LS_DURATIONS = ['1～2日で発送','2～3日で発送','4～7日で発送','8～14日で発送','90日以内で発送'];
+var LS_STATES = ['北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県','茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県','新潟県','富山県','石川県','福井県','山梨県','長野県','岐阜県','静岡県','愛知県','三重県','滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県','鳥取県','島根県','岡山県','広島県','山口県','徳島県','香川県','愛媛県','高知県','福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県'];
+var LS_TEMPLATE = '・通読箇所に目立った傷や汚れは無く、通読に支障はございません。\n・十分な検品をしておりますが、見落とす場合もございます。\n・ヤケ・スレ・破れ・折れ・経年保管によるニオイなど、中古本の性質を十分ご理解の上ご購入ください。\n※上記についてご理解の上ご購入ください。';
+
+function lsSave(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(lsDraft)); }
+  catch(e){ toast('写真が多すぎて保存できません。少し減らしてください'); }
+}
+
+function fillSelect(el, list, value, placeholder){
+  el.innerHTML = '<option value="">' + placeholder + '</option>' +
+    list.map(function(v){ return '<option value="' + esc(v) + '"' + (v === value ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('');
+}
+
+/* 写真：フリマル本体と同じ処理（長辺800pxに縮小・JPEG品質0.7） */
+function lsProcessImage(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var img = new Image();
+      img.onload = function(){
+        var maxWidth = 800;
+        var scale = Math.min(1, maxWidth / img.width);
+        var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function lsRenderPhotos(){
+  $('lsPhotos').innerHTML = lsDraft.photos.map(function(src, i){
+    return '<div class="pslot' + (i === 0 ? ' first' : '') + '">' +
+      '<img src="' + src + '" alt="">' +
+      '<span class="num">' + (i === 0 ? '1枚目' : (i + 1)) + '</span>' +
+      '<button class="del" data-i="' + i + '">×</button>' +
+    '</div>';
+  }).join('');
+  $('lsPhotoCount').textContent = lsDraft.photos.length ? lsDraft.photos.length + '枚（1枚目が表紙）' : '';
+}
+
+$('lsAddPhoto').addEventListener('click', function(){ $('lsFileInput').click(); });
+$('lsFileInput').addEventListener('change', function(){
+  var files = [].slice.call(this.files);
+  this.value = '';
+  if(!files.length) return;
+  if(lsDraft.photos.length + files.length > 10){
+    toast('写真は10枚までです');
+    files = files.slice(0, Math.max(0, 10 - lsDraft.photos.length));
+  }
+  toast(files.length + '枚を読み込んでいます…');
+  Promise.all(files.map(lsProcessImage))
+    .then(function(list){
+      lsDraft.photos = lsDraft.photos.concat(list);
+      lsSave(); lsRenderPhotos();
+      toast('写真を追加しました（' + lsDraft.photos.length + '枚）');
+    })
+    .catch(function(){ toast('写真の読み込みに失敗しました'); });
+});
+$('lsPhotos').addEventListener('click', function(e){
+  var b = e.target.closest('.del');
+  if(!b) return;
+  lsDraft.photos.splice(+b.getAttribute('data-i'), 1);
+  lsSave(); lsRenderPhotos();
+});
+
+$('lsName').addEventListener('input', function(){ lsDraft.name = this.value; lsSave(); });
+$('lsDesc').addEventListener('input', function(){ lsDraft.desc = this.value; lsSave(); });
+$('lsCondition').addEventListener('change', function(){ lsDraft.condition = this.value; lsSave(); });
+$('lsDuration').addEventListener('change', function(){ lsDraft.duration = this.value; lsSave(); });
+$('lsState').addEventListener('change', function(){ lsDraft.state = this.value; lsSave(); });
+$('lsTemplate').addEventListener('click', function(){
+  $('lsDesc').value = ($('lsDesc').value ? $('lsDesc').value + '\n' : '') + LS_TEMPLATE;
+  lsDraft.desc = $('lsDesc').value; lsSave();
+});
+
+/* カテゴリ・配送方法の検索（フリマルの検索機能を利用） */
+function lsAsk(action, payload){
+  var pass = localStorage.getItem(LS_PASS);
+  if(!pass) return Promise.reject(new Error('先に「☁️ 更新」で合言葉を入れてください'));
+  return fetch(APPLY_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ pass: pass, site: 'furimaru', action: action }, payload)),
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if(res.error) throw new Error(res.error);
+    return res;
+  });
+}
+
+function lsRenderPicked(id, label, onClear){
+  var el = $(id);
+  if(!label){ el.hidden = true; return; }
+  el.hidden = false;
+  el.textContent = '選択中：' + label;
+}
+
+var lsCatTimer = null;
+$('lsCatSearch').addEventListener('input', function(){
+  var kw = this.value.trim();
+  clearTimeout(lsCatTimer);
+  if(kw.length < 2){ $('lsCatList').innerHTML = ''; return; }
+  lsCatTimer = setTimeout(function(){
+    $('lsCatList').innerHTML = '<div class="oload" style="padding:12px 0">検索中…</div>';
+    lsAsk('searchCategory', { keyword: kw, condition: lsDraft.condition })
+      .then(function(res){
+        var list = res.items || [];
+        $('lsCatList').innerHTML = list.length
+          ? list.map(function(c){ return '<button data-id="' + esc(c.id) + '" data-name="' + esc(c.name) + '">' + esc(c.name) + '</button>'; }).join('')
+          : '<div class="oload" style="padding:12px 0">見つかりませんでした</div>';
+      })
+      .catch(function(e){ $('lsCatList').innerHTML = '<div class="oload" style="padding:12px 0">' + esc(e.message) + '</div>'; });
+  }, 400);
+});
+$('lsCatList').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(!b) return;
+  lsDraft.category = { id: b.getAttribute('data-id'), name: b.getAttribute('data-name') };
+  lsSave();
+  lsRenderPicked('lsCatPicked', lsDraft.category.name);
+  $('lsCatList').innerHTML = '';
+  $('lsCatSearch').value = '';
+});
+
+var LS_SHIPPING = [
+  ['mercari_easy', 'らくらくメルカリ便'],
+  ['seller_included', '出品者が手配（送料込）'],
+  ['seller_excluded', '出品者が手配（送料別）'],
+  ['seller_mercaribiz', 'メルカリBiz（送料込）'],
+  ['buyer_mercaribiz', 'メルカリBiz（送料別）'],
+  ['reizo_easy_cool', '冷蔵クールメルカリ便'],
+  ['reito_easy_cool', '冷凍クールメルカリ便'],
+  ['cool_included', 'クール便（送料込）'],
+  ['cool_excluded', 'クール便（送料別）'],
+];
+$('lsShipping').addEventListener('change', function(){
+  var v = this.value;
+  var hit = LS_SHIPPING.find(function(x){ return x[0] === v; });
+  lsDraft.shipping = hit ? { id: hit[0], name: hit[1] } : null;
+  lsSave();
+});
+
+/* 保存（＝下書き作成。出品はされない） */
+$('lsSave').addEventListener('click', function(){
+  var missing = [];
+  if(!lsDraft.photos.length) missing.push('写真');
+  if(!lsDraft.name.trim()) missing.push('商品名');
+  if(!lsDraft.desc.trim()) missing.push('商品の説明');
+  if(!lsDraft.condition) missing.push('商品の状態');
+  if(!lsDraft.category) missing.push('カテゴリー');
+  if(!lsDraft.shipping) missing.push('配送方法');
+  if(!lsDraft.duration) missing.push('発送までの日数');
+  if(!lsDraft.state) missing.push('発送元の地域');
+  if(missing.length){ toast('未入力：' + missing.join('・')); return; }
+
+  var btn = this;
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+  lsAsk('saveListing', {
+    listing: {
+      itemName: lsDraft.name.trim(),
+      description: lsDraft.desc.trim(),
+      itemCondition: lsDraft.condition,
+      categoryId: lsDraft.category.id,
+      shippingMethod: lsDraft.shipping.id,
+      shippingDuration: lsDraft.duration,
+      shippingFromState: lsDraft.state,
+      images: lsDraft.photos,
+    },
+  })
+    .then(function(){
+      toast('下書きを保存しました。フリマルのSTEP2から出品してください');
+      if(confirm('下書きを保存しました。\n入力内容を消して次の商品に進みますか？')){
+        lsDraft = { photos: [], name: '', desc: '', condition: lsDraft.condition,
+                    category: null, shipping: lsDraft.shipping,
+                    duration: lsDraft.duration, state: lsDraft.state };
+        lsSave(); lsRenderAll();
+      }
+    })
+    .catch(function(e){ toast('保存できませんでした：' + (e.message || '')); })
+    .finally(function(){ btn.disabled = false; btn.textContent = '下書きを保存'; });
+});
+
+$('lsOpenStep2').addEventListener('click', function(){
+  window.open('https://sys.furimaru.com/ListingStep1.aspx', '_blank');
+});
+$('lsClear').addEventListener('click', function(){
+  if(!confirm('入力内容と写真をすべて消しますか？')) return;
+  lsDraft = { photos: [], name: '', desc: '', condition: '', category: null, shipping: null, duration: '', state: '' };
+  lsSave(); lsRenderAll();
+});
+
+function lsRenderAll(){
+  lsRenderPhotos();
+  $('lsName').value = lsDraft.name;
+  $('lsDesc').value = lsDraft.desc;
+  fillSelect($('lsCondition'), LS_CONDITIONS, lsDraft.condition, '選択してください');
+  fillSelect($('lsDuration'), LS_DURATIONS, lsDraft.duration, '選択してください');
+  fillSelect($('lsState'), LS_STATES, lsDraft.state, '選択してください');
+  lsRenderPicked('lsCatPicked', lsDraft.category && lsDraft.category.name);
+  var shipEl = $('lsShipping');
+  shipEl.innerHTML = '<option value="">選択してください</option>' +
+    LS_SHIPPING.map(function(x){
+      return '<option value="' + x[0] + '"' + (lsDraft.shipping && lsDraft.shipping.id === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>';
+    }).join('');
+}
+
 /* ---------- 起動 ---------- */
 loadChanges();
 fmLoadChanges();
+lsRenderAll();
 idbGet('fm-file').then(function(saved){
   if(saved && saved.bytes){
     try{
