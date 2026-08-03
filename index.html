@@ -311,6 +311,17 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 .lssuggest button:active{background:var(--orange-pale)}
 .lspicked{margin-top:6px;font-size:.84rem;font-weight:700;color:var(--orange-deep);
   background:var(--orange-pale);border:1px solid var(--orange);border-radius:7px;padding:8px 11px}
+.lsprbox{border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;background:#fff}
+.lsprtoggle{display:flex;align-items:center;gap:8px;font-size:.88rem;font-weight:700}
+.lsprtoggle input{width:20px;height:20px;accent-color:var(--orange)}
+.lsprdays{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.lsdaychip{
+  min-width:40px;min-height:36px;border-radius:18px;border:1.5px solid var(--line);
+  background:#fff;color:var(--text2);font-size:.84rem;font-weight:800;padding:0 12px;
+}
+.lsdaychip.on{background:var(--orange);border-color:var(--orange);color:#fff}
+.lsprrow{display:flex;align-items:center;gap:7px;font-size:.84rem;font-weight:600;margin-top:8px}
+.lsprrow .lsinput{width:96px;flex:none;text-align:right}
 
 /* ---------- Keepaグラフの小窓 ---------- */
 .graphwrap{margin-bottom:10px;min-height:180px}
@@ -357,7 +368,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v18</div>
+  <div class="ver">v19</div>
 </header>
 
 <div id="ptPane">
@@ -463,6 +474,28 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <div class="lssec">
       <div class="lslabel">販売価格 <span class="lsreq">出品する時は必須</span></div>
       <input class="lsinput" id="lsPrice" type="number" inputmode="numeric" min="300" placeholder="例：1980">
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">原価（仕入れ値）</div>
+      <input class="lsinput" id="lsCost" type="number" inputmode="numeric" min="0" placeholder="任意。例：220">
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">管理コード</div>
+      <input class="lsinput" id="lsSku" type="text" autocomplete="off" placeholder="空欄ならフリマルの自動採番のまま">
+    </div>
+
+    <div class="lssec">
+      <div class="lslabel">自動値下げ</div>
+      <div class="lsprbox">
+        <label class="lsprtoggle"><input type="checkbox" id="lsPrOn">出品と同時に自動値下げを設定する</label>
+        <div id="lsPrDetail">
+          <div class="lsprdays" id="lsPrDays"></div>
+          <select class="lsinput" id="lsPrTime"></select>
+          <div class="lsprrow">￥<input class="lsinput" id="lsPrYen" type="number" inputmode="numeric" min="1">ずつ値下げ（値上げはしない）</div>
+        </div>
+      </div>
     </div>
 
     <button class="lsbtn main" id="lsPublish">出品する</button>
@@ -1884,14 +1917,18 @@ var LS_DEFAULTS = {
 function lsBlank(keep){
   keep = keep || {};
   return {
-    photos: [], name: '', desc: LS_TEMPLATE, price: '',
+    photos: [], name: '', desc: LS_TEMPLATE, price: '', cost: '', sku: '',
     condition: keep.condition || LS_DEFAULTS.condition,
     category: keep.category || LS_DEFAULTS.category,
     shipping: keep.shipping || LS_DEFAULTS.shipping,
     duration: keep.duration || LS_DEFAULTS.duration,
     state: keep.state || LS_DEFAULTS.state,
+    // 自動値下げは「設定」なので次の商品にも引き継ぐ（デフォルト：金土日・20〜22時・¥100ずつ・値上げなし）
+    pr: keep.pr || { on: true, days: ['fri', 'sat', 'sun'], time: '20', yen: 100 },
   };
 }
+var LS_PR_TIMES = [['6','06:00～10:00'],['10','10:00～14:00'],['14','14:00～18:00'],['18','18:00～20:00'],['20','20:00～22:00'],['22','22:00～24:00']];
+var LS_PR_DAYS = [['mon','月'],['tue','火'],['wed','水'],['thu','木'],['fri','金'],['sat','土'],['sun','日']];
 var lsDraft = null;   // LS_TEMPLATE の定義後に初期化する
 var LS_CONDITIONS = ['新品・未使用','未使用に近い','目立った傷や汚れなし','やや傷や汚れあり','傷や汚れあり','全体的に状態が悪い'];
 var LS_DURATIONS = ['1～2日で発送','2～3日で発送','4～7日で発送','8～14日で発送','90日以内で発送'];
@@ -2106,8 +2143,16 @@ $('lsPublish').addEventListener('click', function(){
   var missing = lsMissing();
   var price = parseInt(String(lsDraft.price || '').replace(/[^0-9]/g, ''), 10) || 0;
   if(price < 300) missing.push('販売価格（300円以上）');
+  var pr = lsDraft.pr || {};
+  var prYen = parseInt(String(pr.yen || '').replace(/[^0-9]/g, ''), 10) || 0;
+  if(pr.on && !(pr.days || []).length) missing.push('自動値下げの曜日');
+  if(pr.on && prYen < 1) missing.push('自動値下げの金額');
   if(missing.length){ toast('未入力：' + missing.join('・')); return; }
-  if(!confirm('フリマルに出品します。\n\n' + lsDraft.name.trim() + '\n販売価格 ¥' + price.toLocaleString() + '\n\nメルカリShopsに公開されます。よろしいですか？')) return;
+  var cost = parseInt(String(lsDraft.cost || '').replace(/[^0-9]/g, ''), 10);
+  var sku = String(lsDraft.sku || '').trim();
+  if(!confirm('フリマルに出品します。\n\n' + lsDraft.name.trim() + '\n販売価格 ¥' + price.toLocaleString() +
+      '\n自動値下げ：' + (pr.on ? lsPrSummary() : 'なし') +
+      '\n\nメルカリShopsに公開されます。よろしいですか？')) return;
 
   var btn = this;
   btn.disabled = true;
@@ -2124,7 +2169,12 @@ $('lsPublish').addEventListener('click', function(){
     .then(function(res){
       var drafts = (res.drafts || []).slice().sort(function(a, b){ return Number(b.id) - Number(a.id); });
       if(!drafts.length) throw new Error('保存した下書きが見つかりませんでした');
-      return lsAsk('publishListing', { itemId: drafts[0].id, price: price });
+      return lsAsk('publishListing', {
+        itemId: drafts[0].id, price: price,
+        cost: isNaN(cost) ? '' : cost,
+        sku: sku,
+        priceReduction: pr.on ? { weekdays: pr.days, time: String(pr.time || '20'), downYen: prYen } : null,
+      });
     })
     .then(function(r){
       lsPendingSaved = false; lsPendingName = '';
@@ -2152,6 +2202,8 @@ function lsRenderAll(){
   $('lsName').value = lsDraft.name;
   $('lsPrice').value = lsDraft.price || '';
   $('lsDesc').value = lsDraft.desc;
+  $('lsCost').value = lsDraft.cost || '';
+  $('lsSku').value = lsDraft.sku || '';
   fillSelect($('lsCondition'), LS_CONDITIONS, lsDraft.condition, '選択してください');
   fillSelect($('lsDuration'), LS_DURATIONS, lsDraft.duration, '選択してください');
   fillSelect($('lsState'), LS_STATES, lsDraft.state, '選択してください');
@@ -2161,7 +2213,44 @@ function lsRenderAll(){
     LS_SHIPPING.map(function(x){
       return '<option value="' + x[0] + '"' + (lsDraft.shipping && lsDraft.shipping.id === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>';
     }).join('');
+  lsRenderPr();
 }
+
+/* ---------- 自動値下げ設定（出品時にフリマルの価格改定へ反映） ---------- */
+function lsPrSummary(){
+  var pr = lsDraft.pr || {};
+  var days = (pr.days || []).map(function(k){
+    var d = LS_PR_DAYS.find(function(x){ return x[0] === k; });
+    return d ? d[1] : '';
+  }).filter(Boolean).join('・');
+  var t = LS_PR_TIMES.find(function(x){ return x[0] === String(pr.time); });
+  return days + ' ' + (t ? t[1] : '') + ' ¥' + (pr.yen || 0) + 'ずつ';
+}
+function lsRenderPr(){
+  if(!lsDraft.pr) lsDraft.pr = lsBlank().pr;
+  var pr = lsDraft.pr;
+  $('lsPrOn').checked = !!pr.on;
+  $('lsPrDetail').hidden = !pr.on;
+  $('lsPrDays').innerHTML = LS_PR_DAYS.map(function(x){
+    return '<button type="button" class="lsdaychip' + ((pr.days || []).indexOf(x[0]) >= 0 ? ' on' : '') + '" data-day="' + x[0] + '">' + x[1] + '</button>';
+  }).join('');
+  $('lsPrTime').innerHTML = LS_PR_TIMES.map(function(x){
+    return '<option value="' + x[0] + '"' + (String(pr.time) === x[0] ? ' selected' : '') + '>' + x[1] + 'に値下げ</option>';
+  }).join('');
+  $('lsPrYen').value = pr.yen || '';
+}
+$('lsPrOn').addEventListener('change', function(){ lsDraft.pr.on = this.checked; lsSave(); lsRenderPr(); });
+$('lsPrDays').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(!b) return;
+  var d = b.getAttribute('data-day');
+  var i = lsDraft.pr.days.indexOf(d);
+  if(i >= 0) lsDraft.pr.days.splice(i, 1); else lsDraft.pr.days.push(d);
+  lsSave(); lsRenderPr();
+});
+$('lsPrTime').addEventListener('change', function(){ lsDraft.pr.time = this.value; lsSave(); });
+$('lsPrYen').addEventListener('input', function(){ lsDraft.pr.yen = parseInt(this.value, 10) || ''; lsSave(); });
+$('lsCost').addEventListener('input', function(){ lsDraft.cost = this.value; lsSave(); });
+$('lsSku').addEventListener('input', function(){ lsDraft.sku = this.value; lsSave(); });
 
 /* ---------- 起動 ---------- */
 loadChanges();
