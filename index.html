@@ -9,7 +9,7 @@
 <title>値下げスター</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="preconnect" href="https://api.keepa.com" crossorigin>
+<link rel="preconnect" href="https://graph.keepa.com" crossorigin>
 <link rel="preconnect" href="https://images-na.ssl-images-amazon.com">
 <link rel="preconnect" href="https://assets.mercari-shops-static.com">
 <style>
@@ -339,6 +339,8 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 .obadges{margin-left:auto;display:flex;gap:4px;align-items:center;flex-shrink:0}
 .tg-fba{background:var(--orange-pale);color:var(--orange-deep);border-color:#f2c78b}
 .tg-prime{background:var(--blue-pale);color:#2f6ea3;border-color:#bcd8ee}
+.tg-cart{background:var(--orange-deep);color:#fff;border-color:#c65f08}
+.tg-mine{background:#3d3a34;color:#fff;border-color:#3d3a34}
 .oseen{font-size:.66rem;color:var(--text3);flex-shrink:0;text-align:right;min-width:52px}
 .omine{
   background:var(--yellow-pale);border:1px solid var(--yellow-line);border-radius:6px;
@@ -368,7 +370,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v20</div>
+  <div class="ver">v21</div>
 </header>
 
 <div id="ptPane">
@@ -1168,12 +1170,7 @@ $('graphImg').addEventListener('error', function(){
   this.alt = 'グラフを取得できませんでした。下の「Keepaサイトで開く」からどうぞ';
 });
 
-/* ---------- 出品一覧の小窓（Keepa・タップ時のみ6トークン） ---------- */
-var KEEPA_COND = {
-  1:['新品',''], 2:['ほぼ新品',''], 3:['非常に良い',''], 4:['良い',''], 5:['可',''],
-  6:['再生品',''], 7:['コレ・ほぼ新品','collector'], 8:['コレ・非常に良い','collector'],
-  9:['コレ・良い','collector'], 10:['コレ・可','collector'],
-};
+/* ---------- 出品一覧の小窓（SP-API・いま出ている出品をそのまま出す） ---------- */
 var OFFERS_TTL = 10 * 60 * 1000;
 var offersCache = (function(){
   try{ return JSON.parse(localStorage.getItem('nesage-offers') || '{}'); }catch(e){ return {}; }
@@ -1188,9 +1185,9 @@ function saveOffersCache(){
   catch(e){ offersCache = {}; try{ localStorage.removeItem('nesage-offers'); }catch(e2){} }
 }
 
-function keepaTimeToMs(t){ return (t + 21564000) * 60000; }
 function relTime(ms){
   var m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  if(m < 1) return 'さっき';
   if(m < 60) return m + '分前';
   if(m < 1440) return Math.round(m / 60) + '時間前';
   return Math.round(m / 1440) + '日前';
@@ -1205,49 +1202,41 @@ $('offersAmazon').addEventListener('click', function(){
 });
 
 function renderOffers(it, data){
-  var p = data.products && data.products[0];
-  var offers = (p && p.offers) || [];
-  var order = (p && p.liveOffersOrder) || [];
-  var live = order.map(function(i){ return offers[i]; }).filter(Boolean);
-  if(!live.length) live = offers.slice(0, 10);
-  var rows = live.map(function(o){
-    var csv = o.offerCSV || [];
-    var price = csv.length >= 2 ? csv[csv.length - 2] : -1;
-    var ship = csv.length >= 1 ? csv[csv.length - 1] : 0;
-    if(ship < 0) ship = 0;
-    var total = price > 0 ? price + ship : 0;
-    var c = KEEPA_COND[o.condition] || ['状態' + o.condition, ''];
-    return { total: total, price: price, ship: ship, cond: c[0], condCls: c[1],
-             fba: !!o.isFBA, prime: !!o.isPrime,
-             seen: o.lastSeen ? keepaTimeToMs(o.lastSeen) : 0 };
-  }).filter(function(r){ return r.total > 0; });
-  rows.sort(function(a, b){ return a.total - b.total; });
+  var rows = (data && data.offers) || [];
+  var all = (data && data.allConditionCount) || 0;
+  var condName = data && data.itemCondition === 'New' ? '新品'
+               : data && data.itemCondition === 'Collectible' ? 'コレクター' : '中古';
   if(!rows.length){
-    $('offersBody').innerHTML = '<div class="oload">現在の出品情報が取れませんでした</div>';
-  } else {
-    $('offersBody').innerHTML = rows.map(function(r){
-      return '<div class="orow">' +
-        '<span class="ocond"><span class="tg tg-cond ' + r.condCls + '">' + r.cond + '</span></span>' +
-        '<span><span class="oprice">' + yen(r.total) + '</span>' +
-          (r.ship > 0 ? '<div class="osub">' + yen(r.price) + '＋送料' + yen(r.ship) + '</div>' : '<div class="osub">送料込</div>') +
-        '</span>' +
-        '<span class="obadges">' +
-          (r.fba ? '<span class="tg tg-fba">FBA</span>' : '') +
-          (r.prime ? '<span class="tg tg-prime">prime</span>' : '') +
-          '<span class="oseen">' + (r.seen ? relTime(r.seen) : '') + '</span>' +
-        '</span>' +
+    $('offersBody').innerHTML = '<div class="oload">いま' + condName + 'の出品はありませんでした' +
+      (all ? '<br><span style="font-size:.75rem">他の状態を含めると' + all + '件あります。下の「Amazonで開く」から</span>' : '') +
       '</div>';
-    }).join('');
+    $('offersFoot').textContent = '';
+    return;
   }
-  $('offersFoot').textContent = '出品' + rows.length + '件 · Keepa残 ' + (data.tokensLeft != null ? data.tokensLeft : '?') + 'トークン';
+  $('offersBody').innerHTML = rows.map(function(r){
+    return '<div class="orow">' +
+      '<span class="ocond"><span class="tg tg-cond ' + (r.collector ? 'collector' : '') + '">' + esc(r.cond) + '</span></span>' +
+      '<span><span class="oprice">' + yen(r.total) + '</span>' +
+        (r.ship > 0 ? '<div class="osub">' + yen(r.price) + '＋送料' + yen(r.ship) + '</div>' : '<div class="osub">送料込</div>') +
+      '</span>' +
+      '<span class="obadges">' +
+        (r.cart ? '<span class="tg tg-cart">カート</span>' : '') +
+        (r.fba ? '<span class="tg tg-fba">FBA</span>' : '') +
+        (r.prime ? '<span class="tg tg-prime">prime</span>' : '') +
+        (r.mine ? '<span class="tg tg-mine">自分</span>' : '') +
+      '</span>' +
+    '</div>';
+  }).join('');
+  $('offersFoot').textContent = condName + rows.length + '件'
+    + (all > rows.length ? '（他の状態も含め全' + all + '件）' : '') + ' · いまの価格';
 }
 
 function openOffers(it){
   if(!it.asin) return;
   offersAsin = it.asin;
-  var key = localStorage.getItem('nesage-keepa');
-  if(!key){
-    // 鍵未取得（クラウド更新前）は従来どおりAmazonへ
+  var pass = localStorage.getItem(LS_PASS);
+  if(!pass){
+    // 合言葉未入力（クラウド更新前）は従来どおりAmazonへ
     window.open('https://www.amazon.co.jp/dp/' + encodeURIComponent(it.asin) + '?aod=1', '_blank');
     toast('小窓は「☁️ 更新」を1回してから使えます');
     return;
@@ -1259,44 +1248,33 @@ function openOffers(it){
   $('offersMine').textContent = '自分：' + (CORE.CONDITION_LABEL[it.condition] || '') + ' 出品価格 ' + yen(it.price) +
     (target === 'akaji' ? '（赤字ｽﾄｯﾊﾟｰ ' + yen(it.akaji) + '）' : '');
   openOffersSheetUI();
-  var cached = offersCache[it.asin];
+  // 状態ごとに別の一覧なので、キャッシュも状態込みで持つ
+  var ckey = it.asin + ':' + (it.condition || '');
+  var cached = offersCache[ckey];
   if(cached && Date.now() - cached.at < OFFERS_TTL){
     renderOffers(it, cached.data);
-    $('offersFoot').textContent += '（' + Math.round((Date.now() - cached.at) / 60000) + '分前に取得）';
+    $('offersFoot').textContent += '（' + relTime(cached.at) + 'に取得）';
     return;
   }
-  $('offersBody').innerHTML = '<div class="oload"><div class="spinner"></div>Keepaから取得中…<br>' +
-    '<span style="font-size:.72rem">初めて見る商品は数秒かかります</span></div>';
+  $('offersBody').innerHTML = '<div class="oload"><div class="spinner"></div>Amazonから取得中…<br>' +
+    '<span style="font-size:.72rem">いま出ている出品を直接見に行きます</span></div>';
   $('offersFoot').textContent = '';
-  // history=0 & only-live-offers=1：現在の出品だけ取る（7.4秒→1.2秒・トークンも半分以下）
-  fetch('https://api.keepa.com/product?key=' + encodeURIComponent(key) +
-        '&domain=5&asin=' + encodeURIComponent(it.asin) +
-        '&offers=20&history=0&only-live-offers=1')
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      // トークン切れはエラーではなく「空の応答」で返ってくる（tokensLeftがマイナス）
-      var noData = !data.products || !data.products.length;
-      if(data.error || (noData && data.tokensLeft != null && data.tokensLeft < 6)){
-        var msg = (data.error && data.error.message) || 'Keepaのトークンが足りません';
-        if(data.tokensLeft != null && data.tokensLeft < 6){
-          var wait = Math.max(1, Math.ceil((6 - data.tokensLeft)));
-          msg = 'Keepaのトークン切れです（残' + data.tokensLeft + '）<br>' +
-                '約' + wait + '分で使えるようになります<br>' +
-                '<span style="font-size:.75rem">急ぐときは下の「Amazonで開く」から</span>';
-        }
-        $('offersBody').innerHTML = '<div class="oload">' + msg + '</div>';
-        $('offersFoot').textContent = '';
-        return;
-      }
-      if(noData){
-        $('offersBody').innerHTML = '<div class="oload">この商品の情報がKeepaにありませんでした<br>' +
+  fetch(APPLY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pass: pass, op: 'offers', asin: it.asin, condition: it.condition }),
+  })
+    .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, data: j }; }); })
+    .then(function(res){
+      if(!res.ok || res.data.error){
+        $('offersBody').innerHTML = '<div class="oload">' + esc(res.data.error || '取得できませんでした') + '<br>' +
           '<span style="font-size:.75rem">下の「Amazonで開く」から確認できます</span></div>';
         $('offersFoot').textContent = '';
         return;
       }
-      offersCache[it.asin] = { at: Date.now(), data: data };
+      offersCache[ckey] = { at: Date.now(), data: res.data };
       saveOffersCache();
-      renderOffers(it, data);
+      renderOffers(it, res.data);
     })
     .catch(function(){
       $('offersBody').innerHTML = '<div class="oload">取得に失敗しました。下の「Amazonで開く」からどうぞ</div>';
