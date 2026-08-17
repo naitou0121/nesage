@@ -370,7 +370,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v21</div>
+  <div class="ver">v22</div>
 </header>
 
 <div id="ptPane">
@@ -479,7 +479,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     </div>
 
     <div class="lssec">
-      <div class="lslabel">赤字ストッパー <span class="lscount">自動値下げの下限。これ以下には下がらない</span></div>
+      <div class="lslabel">赤字ストッパー <span class="lscount">自動値下げの下限。これ以下には下がらない（自動値下げONの時だけ有効）</span></div>
       <input class="lsinput" id="lsAkaji" type="number" inputmode="numeric" min="0" placeholder="例：980">
     </div>
 
@@ -2013,10 +2013,15 @@ function lsAsk(action, payload){
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(Object.assign({ pass: pass, site: 'furimaru', action: action }, payload)),
   }).then(function(r){ return r.json(); }).then(function(res){
-    if(res.error) throw new Error(res.error);
+    if(res.error){
+      var err = new Error(res.error);
+      err.stage = res.stage || ''; err.draftId = res.draftId || ''; err.alreadyListed = !!res.alreadyListed;
+      throw err;
+    }
     return res;
   });
 }
+var lsAskFull = lsAsk;   // 失敗時に stage / draftId 付きの Error を投げる（出品の再実行判定に使う）
 
 function lsRenderPicked(id, label, onClear){
   var el = $(id);
@@ -2120,8 +2125,11 @@ $('lsSave').addEventListener('click', function(){
     .finally(function(){ btn.disabled = false; btn.textContent = '下書きだけ保存（出品はしない）'; });
 });
 
-/* 出品する（保存→出品まで一気。公開される操作なので直前に必ず確認する） */
-var lsPendingSaved = false;   // 前回、保存だけ成功して出品で失敗した状態
+/* 出品する（保存→自動値下げ→出品を Worker 1リクエストで。公開される操作なので直前に必ず確認する）
+ * v3：赤字ストッパーは出品と同時にフリマルの下書き行（赤字STOP欄）へ確定させる（旧CSV書き込みは廃止）。
+ *     出品で失敗した時は Worker が返す draftId を持ち、再実行は「同じ下書きID＋同じ商品名」だけを対象にする。
+ *     （「一番新しい下書きを出品」は別の下書きを掴む事故があったので廃止） */
+var lsPendingDraftId = '';   // 前回、保存は済んで出品で失敗した下書きのID
 var lsPendingName = '';
 $('lsPublish').addEventListener('click', function(){
   var missing = lsMissing();
@@ -2134,48 +2142,44 @@ $('lsPublish').addEventListener('click', function(){
   if(pr.on && !(pr.days || []).length) missing.push('自動値下げの曜日');
   if(pr.on && prYen < 1) missing.push('自動値下げの金額');
   if(missing.length){ toast('未入力：' + missing.join('・')); return; }
+  if(akaji !== '' && !pr.on){ toast('赤字ストッパーは自動値下げをONにした時だけ設定できます（フリマルの仕様）'); return; }
   var cost = parseInt(String(lsDraft.cost || '').replace(/[^0-9]/g, ''), 10);
   var sku = String(lsDraft.sku || '').trim();
-  if(!confirm('フリマルに出品します。\n\n' + lsDraft.name.trim() + '\n販売価格 ¥' + price.toLocaleString() +
+  var name = lsDraft.name.trim();
+  var retry = !!(lsPendingDraftId && lsPendingName === name);
+  if(!confirm('フリマルに出品します。\n\n' + name + '\n販売価格 ¥' + price.toLocaleString() +
       '\n赤字ストッパー：' + (akaji !== '' ? '¥' + akaji.toLocaleString() : 'なし') +
       '\n自動値下げ：' + (pr.on ? lsPrSummary() : 'なし') +
+      (retry ? '\n\n※前回保存した下書き（ID ' + lsPendingDraftId + '）を出品します' : '') +
       '\n\nメルカリShopsに公開されます。よろしいですか？')) return;
 
   var btn = this;
   btn.disabled = true;
-  // 前回の出品失敗分を再実行する時は、内容が変わっていなければ保存を繰り返さない（下書きの重複を防ぐ）
-  var needSave = !(lsPendingSaved && lsPendingName === lsDraft.name.trim());
-  btn.textContent = needSave ? '下書きを保存中…' : '出品しています…';
-  (needSave ? lsAsk('saveListing', { listing: lsPayload() }) : Promise.resolve())
-    .then(function(){
-      lsPendingSaved = true;
-      lsPendingName = lsDraft.name.trim();
-      btn.textContent = '出品しています…';
-      return lsAsk('listDrafts', {});
-    })
-    .then(function(res){
-      var drafts = (res.drafts || []).slice().sort(function(a, b){ return Number(b.id) - Number(a.id); });
-      if(!drafts.length) throw new Error('保存した下書きが見つかりませんでした');
-      return lsAsk('publishListing', {
-        itemId: drafts[0].id, price: price,
-        akaji: akaji,
-        cost: isNaN(cost) ? '' : cost,
-        sku: sku,
-        priceReduction: pr.on ? { weekdays: pr.days, time: String(pr.time || '20'), downYen: prYen } : null,
-      });
-    })
+  btn.textContent = retry ? '出品しています…' : '保存して出品しています…';
+  var payload = {
+    listing: lsPayload(), price: price, akaji: akaji,
+    cost: isNaN(cost) ? '' : cost, sku: sku,
+    priceReduction: pr.on ? { weekdays: pr.days, time: String(pr.time || '20'), downYen: prYen } : null,
+  };
+  if(retry) payload.draftId = lsPendingDraftId;
+  lsAskFull('listItem', payload)
     .then(function(r){
-      lsPendingSaved = false; lsPendingName = '';
-      if(r.akajiApplied === false){
-        toast('出品しました。ただし赤字ストッパーは書き込めませんでした（フリマルタブから設定してください）');
-      }else{
-        toast('出品しました' + (r.sku ? '（SKU：' + r.sku + '）' : ''));
-      }
+      lsPendingDraftId = ''; lsPendingName = '';
+      toast('出品しました' + (r.sku ? '（SKU：' + r.sku + '）' : '') + (r.akaji != null ? '　赤字STOP ¥' + Number(r.akaji).toLocaleString() : ''));
       lsDraft = lsBlank(lsDraft);
       lsSave(); lsRenderAll();
     })
     .catch(function(e){
-      toast('出品できませんでした：' + (e.message || '') + (lsPendingSaved ? '（下書きは保存済み。もう一度「出品する」で再実行できます）' : ''));
+      // 保存は済んで出品で失敗 → 同じ下書きに限定した再実行ができるように覚えておく
+      if(e.draftId){ lsPendingDraftId = String(e.draftId); lsPendingName = name; }
+      else if(e.stage === 'save'){ lsPendingDraftId = ''; lsPendingName = ''; }
+      if(e.alreadyListed){
+        // 前回の出品は成功していた → 二重出品しないよう入力を消す
+        toast(e.message || '既に出品済みです');
+        lsDraft = lsBlank(lsDraft); lsSave(); lsRenderAll();
+        return;
+      }
+      toast('出品できませんでした：' + (e.message || '') + (lsPendingDraftId ? '（下書きは保存済み。もう一度「出品する」で同じ下書きを出品します）' : ''));
     })
     .finally(function(){ btn.disabled = false; btn.textContent = '出品する'; });
 });
