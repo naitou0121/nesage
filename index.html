@@ -51,6 +51,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   background:var(--red);color:#fff;font-size:.7rem;font-weight:700;line-height:19px;text-align:center;
 }
 .filemeta{font-size:.72rem;color:#fff8ec;margin-top:4px;min-height:1em;opacity:.95}
+.filemeta.stale{color:#fff2b0;font-weight:700;opacity:1}
 .sitetab{display:flex;gap:0;margin:8px -14px -8px;border-top:1px solid rgba(255,255,255,.35)}
 .sitetab button{
   flex:1;min-height:40px;font-size:.9rem;font-weight:800;color:rgba(255,255,255,.82);
@@ -371,7 +372,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v23</div>
+  <div class="ver">v24</div>
 </header>
 
 <div id="ptPane">
@@ -605,6 +606,25 @@ var ledger = null;
 try{ ledger = JSON.parse(localStorage.getItem('nesage-ledger') || 'null'); }catch(e){}
 var IDLE_STEPS = [0, 30, 60, 90];   // 0 = 絞り込みOFF
 var idleDays = 0;
+
+var STALE_DAYS = 2;   // 台帳がこの日数以上古かったら警告する
+
+// 台帳自体が何日前のものか（定期実行が飛ぶと古いまま配られるので常に見せる）
+function ledgerAgeDays(){
+  if(!ledger || !ledger.asOf) return null;
+  var d = Date.parse(ledger.asOf);
+  if(isNaN(d)) return null;
+  var today = new Date(); today.setHours(0,0,0,0);
+  return Math.max(0, Math.round((today - d) / 86400000));
+}
+
+function ledgerFreshLabel(){
+  var age = ledgerAgeDays();
+  if(age == null) return '台帳なし';
+  if(age === 0) return '台帳 今日';
+  if(age === 1) return '台帳 昨日';
+  return '⚠️台帳 ' + age + '日前';
+}
 
 // そのSKUを最後に触ってから何日たったか（台帳に無ければ null）
 function idleOf(sku){
@@ -840,6 +860,18 @@ $('idleChip').addEventListener('click', function(){
     toast('台帳がまだありません（データを取り込むと使えます）');
     return;
   }
+  // 警告は1本にまとめる（toastは上書き式なので連続で出すと最後しか見えない）
+  if(idleDays === 0){
+    var warn = [];
+    var age = ledgerAgeDays();
+    if(age != null && age >= STALE_DAYS) warn.push('台帳が' + age + '日前です');
+    var gaps = (ledger.gaps || []).filter(function(g){ return g.days >= 2; });
+    if(gaps.length){
+      var g = gaps[gaps.length - 1];
+      warn.push(g.from + '〜' + g.to + 'の' + g.days + '日ぶんが未取得');
+    }
+    if(warn.length) toast('⚠️ ' + warn.join(' / ') + '（日数が実際より短く出ます）');
+  }
   var i = IDLE_STEPS.indexOf(idleDays);
   idleDays = IDLE_STEPS[(i + 1) % IDLE_STEPS.length];
   this.textContent = idleDays ? 'ほっとき' + idleDays + '日' : 'ほっとき';
@@ -1033,7 +1065,9 @@ function updateHeader(){
   $('exportBtn').disabled = !parsed || ptN === 0;
   $('fileMeta').textContent = parsed
     ? (fileSource || fileName + ' ' + new Date(importedAt).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) + ' 読込') + '・' + parsed.items.length + '件'
+      + (parsed ? '・' + ledgerFreshLabel() : '')
     : '';
+  $('fileMeta').classList.toggle('stale', ledgerAgeDays() != null && ledgerAgeDays() >= STALE_DAYS);
 }
 
 /* 1枚のカードだけ再描画（全リスト再構築でスクロール位置を壊さない） */
