@@ -120,6 +120,15 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 .lsprrow{display:flex;align-items:center;gap:7px;font-size:.84rem;font-weight:600;margin-top:8px}
 .lsprrow .lsinput{width:96px;flex:none;text-align:right}
 .oload{font-size:.8rem;color:var(--text2);text-align:center}
+.lslog{margin-top:22px;border-top:1px solid var(--line);padding-top:14px}
+.lsloghead{font-size:.8rem;font-weight:700;color:var(--text2);margin-bottom:8px}
+.lslogrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.82rem}
+.lslogrow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lslogrow .st{font-weight:700;font-size:.76rem;white-space:nowrap}
+.lslogrow .st.ok{color:#0EAA9F}
+.lslogrow .st.ng{color:var(--red)}
+.lslogrow button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:4px 10px;font-size:.76rem;white-space:nowrap}
+.lslogtime{font-size:.7rem;color:var(--text2)}
 </style>
 </head>
 <body>
@@ -127,7 +136,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 <header>
   <div class="hrow">
     <h1>🛍️ フリマル出品</h1>
-    <div class="ver">v3</div>
+    <div class="ver">v4</div>
   </div>
 </header>
 
@@ -232,6 +241,12 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button class="lsbtn sub" id="lsSave">下書きだけ保存（出品はしない）</button>
     <button class="lsbtn warn" id="lsClear">入力をすべて消す</button>
     <div class="lsnote" style="margin-top:10px">「出品する」は確認のあとメルカリShopsに公開されます。写真・入力内容はこの端末に自動保存されます。</div>
+    <div class="lslog" id="lsLogBox" hidden>
+      <div class="lsloghead">最近の出品</div>
+      <div id="lsLogList"></div>
+      <div class="lsnote" style="margin-top:8px">⚠️ は「フリマルの在庫に商品が出たことを確認できていない」もの。［確認］でいまの状態を見にいきます。</div>
+    </div>
+
     <button class="lsbtn sub" id="lsRepass" style="margin-top:14px">合言葉を入れ直す</button>
   </div>
 </div>
@@ -281,6 +296,59 @@ $('lsRepass').addEventListener('click', function(){
 
 /* ================= 出品フォーム ================= */
 var LS_KEY = 'nesage-listing';   // 値下げスター本体と同じキー（同一端末なら下書きも共通）
+var LS_LOG = 'shuppin-log';      // 出品の証跡（何を出したか。2026-09-07に8件が跡形もなく消えた反省）
+
+function lsLogGet(){
+  try{ return JSON.parse(localStorage.getItem(LS_LOG) || '[]'); }catch(e){ return []; }
+}
+function lsLogPut(list){
+  try{ localStorage.setItem(LS_LOG, JSON.stringify(list.slice(0, 30))); }catch(e){}
+  lsLogRender();
+}
+function lsLogAdd(rec){
+  var list = lsLogGet();
+  list.unshift(rec);
+  lsLogPut(list);
+}
+function lsLogSet(at, patch){
+  var list = lsLogGet();
+  for(var i=0;i<list.length;i++){ if(list[i].at === at){ for(var k in patch) list[i][k] = patch[k]; } }
+  lsLogPut(list);
+}
+function lsLogTime(ms){
+  var d = new Date(ms);
+  return (d.getMonth()+1) + '/' + d.getDate() + ' ' + ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+}
+function lsLogRender(){
+  var list = lsLogGet();
+  var box = $('lsLogBox');
+  if(!list.length){ box.hidden = true; return; }
+  box.hidden = false;
+  $('lsLogList').innerHTML = list.slice(0, 12).map(function(r){
+    var ok = r.verified;
+    return '<div class="lslogrow">' +
+      '<span class="st ' + (ok ? 'ok' : 'ng') + '">' + (ok ? '✅' : '⚠️') + '</span>' +
+      '<span class="nm">' + esc(r.name || '') + '<br><span class="lslogtime">' + lsLogTime(r.at) +
+        (r.price ? '　¥' + Number(r.price).toLocaleString() : '') + (r.sku ? '　' + esc(r.sku) : '') + '</span></span>' +
+      '<button data-at="' + r.at + '">確認</button>' +
+    '</div>';
+  }).join('');
+}
+document.addEventListener('click', function(ev){
+  var btn = ev.target.closest && ev.target.closest('#lsLogList button');
+  if(!btn) return;
+  var at = Number(btn.getAttribute('data-at'));
+  var rec = lsLogGet().filter(function(r){ return r.at === at; })[0];
+  if(!rec) return;
+  btn.disabled = true; btn.textContent = '確認中…';
+  lsAsk('checkListed', { sku: rec.sku || '', itemName: rec.name || '' })
+    .then(function(res){
+      lsLogSet(at, { verified: !!res.listed, sku: res.sku || rec.sku || '' });
+      toast(res.listed ? '出品されています（フリマルの在庫にあります）' : '⚠️ まだフリマルの在庫にありません。出し直しが必要です');
+    })
+    .catch(function(e){ toast('確認できませんでした：' + (e.message || '')); })
+    .finally(function(){ btn.disabled = false; btn.textContent = '確認'; });
+});
 /* いつも同じ値を使う項目は初期値として入れておく（変えたい時だけ触る） */
 var LS_DEFAULTS = {
   condition: 'やや傷や汚れあり',
@@ -558,6 +626,16 @@ $('lsPublish').addEventListener('click', function(){
   lsAskFull('listItem', payload)
     .then(function(r){
       lsPendingDraftId = ''; lsPendingName = '';
+      lsLogAdd({ at: Date.now(), name: name, price: price, sku: r.sku || '', verified: !!r.verified });
+      if(!r.verified){
+        // フリマルは受け取ったが、メルカリShopsの商品になったことを確認できていない。
+        // ここで成功と言うと2026-09-07の再現になるので、入力は消さずに残す。
+        alert('⚠️ 出品を受け付けましたが、フリマルの在庫に商品が出たことを確認できませんでした。\n\n' + name +
+              '\n\n入力は消していません。少し待ってから、下の「最近の出品」で［確認］を押してください。' +
+              '\nそれでも出ていなければ、もう一度「出品する」を押して出し直してください。');
+        toast('⚠️ 出品を確認できませんでした（入力は残してあります）');
+        return;
+      }
       toast('出品しました' + (r.sku ? '（SKU：' + r.sku + '）' : '') + (r.akaji != null ? '　赤字STOP ¥' + Number(r.akaji).toLocaleString() : ''));
       lsDraft = lsBlank(lsDraft);
       lsSave(); lsRenderAll();
@@ -641,6 +719,7 @@ $('lsSku').addEventListener('input', function(){ lsDraft.sku = this.value; lsSav
 
 /* ---------- 起動 ---------- */
 lsRenderAll();
+lsLogRender();
 if(localStorage.getItem(LS_PASS)) showApp(); else showGate();
 
 if('serviceWorker' in navigator){
