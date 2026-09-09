@@ -163,6 +163,10 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   background:var(--blue-pale);color:#2f6ea3;border:1px solid #bcd8ee;transition:transform .1s ease-out;
 }
 .tracebtn:active{transform:scale(.94)}
+.autotag{margin-left:auto;font-size:11px;padding:3px 8px;border-radius:999px;
+  border:1px solid var(--line);white-space:nowrap}
+.autotag.on{background:#fff4e8;color:#a24d05;border-color:#f0c9a0}
+.autotag.none{background:#f3f4f6;color:#9aa0a6}
 .tracebtn.aim{background:var(--orange-deep);color:#fff;border-color:#c65f08}
 .tracebtn.dirty{background:var(--orange);color:#fff;border-color:var(--orange-deep)}
 
@@ -372,7 +376,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v25</div>
+  <div class="ver">v26</div>
 </header>
 
 <div id="ptPane">
@@ -1757,6 +1761,21 @@ function fmSavePhotos(){
   try{ localStorage.setItem('nesage-fm-photos', JSON.stringify(fmPhotos)); }catch(e){}
 }
 function fmSaveShop(id){ if(id){ fmShopId = id; localStorage.setItem('nesage-fm-shop', id); } }
+/* 自動値下げ（価格改定）の“いまの設定”。商品データCSVには入っていないので在庫一覧から取る */
+var fmReductions = (function(){
+  try{ return JSON.parse(localStorage.getItem('nesage-fm-reductions') || '{}'); }catch(e){ return {}; }
+})();
+function fmSaveReductions(){
+  try{ localStorage.setItem('nesage-fm-reductions', JSON.stringify(fmReductions)); }catch(e){}
+}
+// 「金・土・日 20:00～22:00 ￥100値下げする」→「金土日 20-22時 −100円」
+function fmReductionShort(t){
+  if(!t) return '';
+  var s2 = String(t).replace(/値下げする$/, '').replace(/・/g, '').replace(/\s+/g, ' ').trim();
+  s2 = s2.replace(/(\d{1,2}):00\s*[～~-]\s*(\d{1,2}):00/, '$1-$2時');
+  s2 = s2.replace(/[￥¥]\s*([\d,]+)/, '−$1円');
+  return s2;
+}
 var fmChanges = {};
 var fmSort = 'new', fmOnlyOld = false, fmOnlyChanged = false, fmQuery = '';
 var fmVisible = [], fmRendered = 0;
@@ -1818,6 +1837,7 @@ function fmCloudUpdate(){
       var u8 = new Uint8Array(bin.length);
       for(var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
       if(res.photos && Object.keys(res.photos).length){ fmPhotos = res.photos; fmSavePhotos(); }
+      if(res.reductions && Object.keys(res.reductions).length){ fmReductions = res.reductions; fmSaveReductions(); }
       fmSaveShop(res.shopId);
       var r2 = fmIngest(u8, Date.now());
       toast('フリマル ' + r2.count + '件 取り込みました' + (r2.dropped ? '（対象外の変更' + r2.dropped + '件は削除）' : ''));
@@ -1871,8 +1891,11 @@ function fmCardHTML(it){
       '<div class="porig">' + (dirty ? '元' + (it[field] === 0 ? '－' : yen(it[field])) : '') + '</div>' +
     '</div>';
   }
-  var autoOn = (chg.autoDown != null) ? !!chg.autoDown : (it.autoDown === 'on');
-  var autoDirty = chg.autoDown != null;
+  var red = fmReductions[it.id];
+  var redHtml = (red === undefined)
+    ? '<span class="autotag none">自動値下げ ?</span>'
+    : (red ? '<span class="autotag on">自動値下げ ' + esc(fmReductionShort(red)) + '</span>'
+           : '<span class="autotag none">自動値下げ なし</span>');
   var profit = fmFieldVal(it, 'price') - it.cost - it.shipping - Math.round(fmFieldVal(it, 'price') * 0.1);
   var profitCls = profit < 0 ? ' class="minus"' : '';
   var pct = fmFieldVal(it, 'price') > 0 ? ' (' + Math.round(profit / fmFieldVal(it, 'price') * 100) + '%)' : '';
@@ -1897,8 +1920,7 @@ function fmCardHTML(it){
     '<div class="metaline">' +
       '仕入 <span class="cost">' + yen(it.cost) + '</span>' +
       ' · 利益 <b' + profitCls + '>' + yen(profit) + pct + '</b>' +
-      '<button class="tracebtn' + (autoDirty ? ' dirty' : (autoOn ? ' aim' : '')) + '" data-act="fmauto">' +
-        '自動値下げ ' + (autoOn ? 'ON' : 'OFF') + '</button>' +
+      redHtml +
     '</div>' +
     '<div class="actions">' +
       '<button class="abtn offers" data-act="fmopen">商品ページ</button>' +
@@ -1984,12 +2006,6 @@ $('fmList').addEventListener('click', function(e){
   if(act === 'fmminus100'){
     var cur = fmFieldVal(it, 'price');
     fmSetField(it, 'price', Math.max(0, cur - 100));
-    fmUpdateCard(it.id);
-    return;
-  }
-  if(act === 'fmauto'){
-    var now = (fmChanges[it.id] && fmChanges[it.id].autoDown != null) ? fmChanges[it.id].autoDown : (it.autoDown === 'on');
-    fmSetField(it, 'autoDown', !now);
     fmUpdateCard(it.id);
     return;
   }
