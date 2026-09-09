@@ -372,7 +372,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v24</div>
+  <div class="ver">v25</div>
 </header>
 
 <div id="ptPane">
@@ -1435,32 +1435,40 @@ function openSheet(){
   $('sheet').classList.add('show');
 }
 
-var APPLY_STEPS = [
+var APPLY_STEPS_PT = [
   'プライスターにログイン中…',
   '最新の在庫を確認中…',
   '変更を書き込み中…',
   'プライスターで処理中…',
+];
+var APPLY_STEPS_FM = [
+  'フリマルにログイン中…',
+  '最新の在庫を確認中…',
+  '変更を書き込み中…',
+  'フリマルで処理中…',
 ];
 var applyTimer = null;
 var lastApplyKinds = { price: false, stopper: false };
 
 function showApplyProgress(n){
   var i = 0;
+  var steps = (site === 'furimaru') ? APPLY_STEPS_FM : APPLY_STEPS_PT;
+  var wait = (site === 'furimaru') ? '1〜2分ほど' : '10秒ほど';
   $('applyStatus').hidden = false;
   var render = function(){
     $('applyStatus').innerHTML =
       '<div class="applybox">' +
         '<div class="spinner"></div>' +
-        '<div class="applystep">' + APPLY_STEPS[i] + '</div>' +
-        '<div class="applynote">' + n + '件を反映しています（10秒ほど）<br>' +
+        '<div class="applystep">' + steps[i] + '</div>' +
+        '<div class="applynote">' + n + '件を反映しています（' + wait + '）<br>' +
         'この画面を閉じずにお待ちください</div>' +
       '</div>';
   };
   render();
   clearInterval(applyTimer);
   applyTimer = setInterval(function(){
-    if(i < APPLY_STEPS.length - 1){ i++; render(); }
-  }, 2500);
+    if(i < steps.length - 1){ i++; render(); }
+  }, (site === 'furimaru') ? 12000 : 2500);
 }
 
 function showApplyResult(res, err){
@@ -1556,22 +1564,92 @@ function fmDoApply(){
       $('applyList').hidden = true;
       $('doApply').hidden = true;
       $('clearChanges').hidden = true;
-      $('sheet').classList.remove('applying');
-      $('applyStatus').innerHTML =
-        '<div class="applybox ok">' +
-          '<div class="applybig">✅</div>' +
-          '<div class="applyres ok">フリマルに送信しました</div>' +
-          '<div class="applynote"><b>' + res.applied + '件</b>を受け付けました<br><br>' +
-            'フリマル側の反映まで<b>数分かかります</b>。<br>' +
-            'しばらくしてから「☁️ 更新」を押すと、反映後の状態を確認できます。' +
-          '</div>' +
-        '</div>';
+      // ここではまだ「受け付けた」だけ。フリマルの登録履歴を見て完了を確かめる
+      fmWatchApply(res.reserveId, res.applied);
     })
     .catch(function(e){
       showApplyResult(null, e.message || '通信に失敗しました');
       btn.disabled = false;
       btn.textContent = (site === 'furimaru' ? 'フリマル' : 'プライスター') + 'に反映する';
     });
+}
+
+/* フリマルは非同期処理。登録履歴（ReserveId）を見に行って、
+ * 「完了◯件・失敗◯件」を確かめてから✅を出す。確かめられないうちは✅を出さない。 */
+var fmWatchTimer = null;
+function fmWatchApply(reserveId, sentCount){
+  clearInterval(fmWatchTimer);
+  var pass = localStorage.getItem(LS_PASS);
+  var started = Date.now();
+  var LIMIT = 6 * 60 * 1000;   // 6分見て決着しなければ「確認できず」で止める
+  var box = function(cls, big, head, note){
+    $('applyStatus').hidden = false;
+    $('sheet').classList.remove('applying');
+    $('applyStatus').innerHTML =
+      '<div class="applybox ' + cls + '">' +
+        '<div class="applybig">' + big + '</div>' +
+        '<div class="applyres ' + cls + '">' + head + '</div>' +
+        '<div class="applynote">' + note + '</div>' +
+      '</div>';
+  };
+  var waiting = function(){
+    var sec = Math.round((Date.now() - started) / 1000);
+    $('applyStatus').hidden = false;
+    $('applyStatus').innerHTML =
+      '<div class="applybox">' +
+        '<div class="spinner"></div>' +
+        '<div class="applystep">フリマルで処理中…（' + sec + '秒）</div>' +
+        '<div class="applynote"><b>' + sentCount + '件</b>を受け付けました。<br>' +
+        'フリマル側の反映を確かめています（1〜2分）。<br>この画面を閉じずにお待ちください</div>' +
+      '</div>';
+  };
+  waiting();
+  if(!reserveId){
+    box('ok', '✅', 'フリマルに送信しました',
+      '<b>' + sentCount + '件</b>を受け付けました。<br>結果の確認ができませんでした。<br>しばらくしてから「☁️ 更新」で確かめてください。');
+    return;
+  }
+  var tick = function(){
+    if(Date.now() - started > LIMIT){
+      clearInterval(fmWatchTimer);
+      box('ng', '⚠️', '結果を確認できませんでした',
+        'フリマルの処理が6分たっても終わりませんでした。<br>フリマルの「CSVで一括編集 → 4.登録履歴」を直接見てください。');
+      return;
+    }
+    fetch(APPLY_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pass: pass, site: 'furimaru', action: 'applyStatus', reserveId: reserveId }),
+    })
+      .then(function(r){ return r.json(); })
+      .then(function(st){
+        if(st.error) throw new Error(st.error);
+        if(!st.found){ waiting(); return; }
+        if(st.status === '完了'){
+          clearInterval(fmWatchTimer);
+          var failed = st.failed || 0;
+          if(failed > 0){
+            box('ng', '⚠️', 'フリマルで' + failed + '件が失敗しました',
+              '完了 <b>' + (st.done != null ? st.done : '-') + '件</b> / 失敗 <b>' + failed + '件</b>（送った ' + (st.total != null ? st.total : sentCount) + '件）<br><br>' +
+              'フリマルの「CSVで一括編集 → 4.登録履歴」の<b>エラー詳細</b>で中身を確認してください。');
+          }else{
+            box('ok', '✅', 'フリマルへの反映が完了しました',
+              '<b>' + (st.done != null ? st.done : sentCount) + '件</b>を反映しました（失敗0件）<br>' +
+              '完了時刻 ' + (st.endAt || '') + '<br><br>「☁️ 更新」を押すと、反映後の値段で一覧が出ます。');
+          }
+          return;
+        }
+        if(st.status === 'エラー'){
+          clearInterval(fmWatchTimer);
+          box('ng', '⚠️', 'フリマル側でエラーになりました',
+            'フリマルの「CSVで一括編集 → 4.登録履歴」のエラー詳細を確認してください。');
+          return;
+        }
+        waiting();
+      })
+      .catch(function(e){ waiting(); });
+  };
+  fmWatchTimer = setInterval(tick, 12000);
+  setTimeout(tick, 8000);
 }
 
 $('doApply').addEventListener('click', function(){
@@ -1623,6 +1701,7 @@ $('doApply').addEventListener('click', function(){
 });
 function closeSheet(){
   clearInterval(applyTimer);
+  clearInterval(fmWatchTimer);
   $('sheetBack').classList.remove('show');
   $('sheet').classList.remove('show');
   $('sheet').classList.remove('applying');
