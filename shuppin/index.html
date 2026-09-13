@@ -136,7 +136,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 <header>
   <div class="hrow">
     <h1>🛍️ フリマル出品</h1>
-    <div class="ver">v4</div>
+    <div class="ver">v5</div>
   </div>
 </header>
 
@@ -344,7 +344,11 @@ document.addEventListener('click', function(ev){
   lsAsk('checkListed', { sku: rec.sku || '', itemName: rec.name || '' })
     .then(function(res){
       lsLogSet(at, { verified: !!res.listed, sku: res.sku || rec.sku || '' });
-      toast(res.listed ? '出品されています（フリマルの在庫にあります）' : '⚠️ まだフリマルの在庫にありません。出し直しが必要です');
+      // 確認で✅になった商品が入力欄にまだ残っていれば白紙に戻す（出品時に確認が間に合わず⚠️で残った分の後始末。二重出品の防止）
+      var norm = function(t){ return String(t || '').replace(/\s+/g, ' ').trim(); };
+      var stillHere = res.listed && norm(rec.name) && norm(lsDraft.name) === norm(rec.name);
+      if(stillHere){ lsDraft = lsBlank(lsDraft); lsSave(); lsRenderAll(); }
+      toast(res.listed ? '出品されています（フリマルの在庫にあります）' + (stillHere ? '　入力を白紙に戻しました' : '') : '⚠️ まだフリマルの在庫にありません。出し直しが必要です');
     })
     .catch(function(e){ toast('確認できませんでした：' + (e.message || '')); })
     .finally(function(){ btn.disabled = false; btn.textContent = '確認'; });
