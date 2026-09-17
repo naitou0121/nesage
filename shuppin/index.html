@@ -132,6 +132,16 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 .lsshops{font-size:.76rem;margin:0 0 8px}
 .lsshops a{color:#0EAA9F;font-weight:700}
 .lslogtime{font-size:.7rem;color:var(--text2)}
+.lslogrow{flex-wrap:wrap}
+.lslogrow .st.wait{color:var(--pink-deep)}
+.lslogrow .acts{flex-basis:100%;display:flex;gap:6px;justify-content:flex-end}
+.lslogmsg{display:block;font-size:.7rem;color:var(--red);white-space:normal}
+.qbar{margin-top:8px;border-radius:8px;padding:7px 10px;font-size:.78rem;font-weight:800;
+  background:rgba(255,255,255,.92);color:var(--pink-deep);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qbar.ng{background:#fff3f2;color:var(--red);border:1.5px solid #e0a8a4}
+.lscatgrp{font-size:.7rem;font-weight:700;color:var(--text2);margin:10px 0 5px}
+.lscatchips{display:flex;flex-wrap:wrap;gap:6px}
+.lscatchips .lsdaychip{font-size:.8rem;min-height:38px}
 </style>
 </head>
 <body>
@@ -139,8 +149,9 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 <header>
   <div class="hrow">
     <h1>🛍️ フリマル出品</h1>
-    <div class="ver">v7</div>
+    <div class="ver">v8</div>
   </div>
+  <div class="qbar" id="lsQueueBar" hidden></div>
 </header>
 
 <!-- 合言葉ゲート（初回・合言葉が消えた時だけ出る） -->
@@ -161,7 +172,8 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 <div id="lsPane" hidden>
   <div class="lsbody">
     <div class="lsnote">写真を選んで内容を書いたら<b>「出品する」だけでアプリから出品まで完結</b>します。<br>
-      あとで出品したい時は「下書きだけ保存」でもOKです。</div>
+      出品は<b>裏で進む</b>ので、押したらすぐ次の商品を入力してOKです（結果は上の帯と、下の「最近の出品」に出ます）。<br>
+      ※出品が終わるまで<b>このアプリは開いたまま</b>にしてください。</div>
 
     <div class="lssec">
       <div class="lslabel">商品の写真 <span class="lsreq">必須</span><span class="lscount" id="lsPhotoCount"></span></div>
@@ -188,8 +200,10 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 
     <div class="lssec">
       <div class="lslabel">カテゴリー <span class="lsreq">必須</span></div>
-      <input class="lsinput" id="lsCatSearch" type="search" placeholder="例：青年漫画" autocomplete="off">
-      <div class="lspicked" id="lsCatPicked" hidden></div>
+      <div class="lspicked" id="lsCatPicked" hidden style="margin-top:0"></div>
+      <div id="lsCatChips"></div>
+      <div class="lscatgrp">上に無い時は検索（例：雑誌、フィルムコミック）</div>
+      <input class="lsinput" id="lsCatSearch" type="search" placeholder="カテゴリー名で検索" autocomplete="off">
       <div class="lssuggest" id="lsCatList"></div>
     </div>
 
@@ -243,12 +257,12 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
     <button class="lsbtn main" id="lsPublish">出品する</button>
     <button class="lsbtn sub" id="lsSave">下書きだけ保存（出品はしない）</button>
     <button class="lsbtn warn" id="lsClear">入力をすべて消す</button>
-    <div class="lsnote" style="margin-top:10px">「出品する」は確認のあとメルカリShopsに公開されます。写真・入力内容はこの端末に自動保存されます。</div>
+    <div class="lsnote" style="margin-top:10px">「出品する」は確認のあとメルカリShopsに公開されます。写真・入力内容はこの端末に自動保存されます。<br>出品中の商品もこの端末に控えてあるので、失敗しても［戻す］で入力に戻せます。</div>
     <div class="lslog" id="lsLogBox" hidden>
       <div class="lsloghead">最近の出品</div>
       <div class="lsshops" id="lsShopsAll" hidden><a href="#" target="_blank" rel="noopener">メルカリShopsの商品一覧を開く（いいね数はここ）</a></div>
       <div id="lsLogList"></div>
-      <div class="lsnote" style="margin-top:8px">⚠️ は「フリマルの在庫に商品が出たことを確認できていない」もの。［確認］でいまの状態を見にいきます。<br>［Shops］はその商品のメルカリShops編集ページ。いいね数の確認と削除はそこで（フリマルにはこの機能がありません）。</div>
+      <div class="lsnote" style="margin-top:8px">⏳ は裏で出品しているところ。❌ は出品できなかったもの（［もう一度］か［戻す］で出し直せます）。<br>⚠️ は「フリマルの在庫に商品が出たことを確認できていない」もの。［確認］でいまの状態を見にいきます。<br>［Shops］はその商品のメルカリShops編集ページ。いいね数の確認と削除はそこで（フリマルにはこの機能がありません）。</div>
     </div>
 
     <button class="lsbtn sub" id="lsRepass" style="margin-top:14px">合言葉を入れ直す</button>
@@ -339,9 +353,14 @@ function lsShopsListUrl(list){
   }
   return saved;
 }
+/* 出品の状態（v8：裏で出品）。state が無い古い記録は verified だけで ✅/⚠️ を決める */
+var LS_ACTIVE = { queued: 1, sending: 1, checking: 1 };
+var LS_PROBLEM = { failed: 1, unverified: 1, interrupted: 1 };
+var LS_STATE_LABEL = { queued: '⏳ 順番待ち', sending: '⏳ 出品中…', checking: '⏳ 反映待ち', failed: '❌', unverified: '⚠️', interrupted: '⚠️', restored: '↩︎ 戻した' };
 function lsLogRender(){
   var list = lsLogGet();
   var box = $('lsLogBox');
+  lsBarRender(list);
   if(!list.length){ box.hidden = true; return; }
   box.hidden = false;
   var all = lsShopsListUrl(list);
@@ -350,30 +369,92 @@ function lsLogRender(){
   $('lsLogList').innerHTML = list.slice(0, 12).map(function(r){
     var ok = r.verified;
     var ed = lsShopsUrl(r.editUrl);
+    var st = r.state || '';
+    var label = LS_STATE_LABEL[st] || (ok ? '✅' : '⚠️');
+    var cls = LS_ACTIVE[st] ? 'wait' : (ok && !LS_PROBLEM[st] ? 'ok' : 'ng');
+    var hasJob = !!lsJobs[r.at];
+    var btn = function(act, text){ return '<button data-at="' + r.at + '" data-act="' + act + '">' + text + '</button>'; };
+    var acts = '';
+    if(LS_PROBLEM[st]){
+      acts = '<span class="acts">' +
+        (st === 'failed' && hasJob ? btn('retry', 'もう一度') : btn('check', '確認')) +
+        (hasJob ? btn('restore', '戻す') : '') + btn('remove', '消す') + '</span>';
+    }
     return '<div class="lslogrow">' +
-      '<span class="st ' + (ok ? 'ok' : 'ng') + '">' + (ok ? '✅' : '⚠️') + '</span>' +
+      '<span class="st ' + cls + '">' + label + '</span>' +
       '<span class="nm">' + esc(r.name || '') + '<br><span class="lslogtime">' + lsLogTime(r.at) +
-        (r.price ? '　¥' + Number(r.price).toLocaleString() : '') + (r.sku ? '　' + esc(r.sku) : '') + '</span></span>' +
+        (r.price ? '　¥' + Number(r.price).toLocaleString() : '') + (r.sku ? '　' + esc(r.sku) : '') + '</span>' +
+        (LS_PROBLEM[st] && r.msg ? '<span class="lslogmsg">' + esc(r.msg) + '</span>' : '') + '</span>' +
       (ed ? '<a class="shops" href="' + esc(ed) + '" target="_blank" rel="noopener">Shops</a>' : '') +
-      '<button data-at="' + r.at + '">確認</button>' +
+      (!acts && !LS_ACTIVE[st] && st !== 'restored' ? btn('check', '確認') : '') + acts +
     '</div>';
   }).join('');
 }
+/* ヘッダー下の帯：裏で出品している件数／出品できなかった件数。タップで「最近の出品」へ */
+function lsBarRender(list){
+  list = list || lsLogGet();
+  var bar = $('lsQueueBar');
+  var active = list.filter(function(r){ return LS_ACTIVE[r.state]; });
+  var ng = list.filter(function(r){ return LS_PROBLEM[r.state]; });
+  if(!active.length && !ng.length){ bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.className = 'qbar' + (ng.length ? ' ng' : '');
+  var now = active.filter(function(r){ return r.state === 'sending'; })[0];
+  bar.textContent =
+    (ng.length ? '⚠️ 出品できていない商品が' + ng.length + '件（タップで確認）' + (active.length ? '／' : '') : '') +
+    (active.length ? '⏳ 裏で出品中：' + active.length + '件' + (now ? '（いま：' + now.name + '）' : '') : '');
+}
+$('lsQueueBar').addEventListener('click', function(){ $('lsLogBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+
 document.addEventListener('click', function(ev){
   var btn = ev.target.closest && ev.target.closest('#lsLogList button');
   if(!btn) return;
   var at = Number(btn.getAttribute('data-at'));
+  var act = btn.getAttribute('data-act') || 'check';
   var rec = lsLogGet().filter(function(r){ return r.at === at; })[0];
   if(!rec) return;
+  var norm = function(t){ return String(t || '').replace(/\s+/g, ' ').trim(); };
+
+  if(act === 'retry'){
+    if(!lsJobs[at]){ toast('控えが残っていません。入力し直してください'); return; }
+    lsLogSet(at, { state: 'queued', msg: '' });
+    toast('もう一度、裏で出品します');
+    lsKick();
+    return;
+  }
+  if(act === 'restore'){
+    var job = lsJobs[at];
+    if(!job){ toast('控えが残っていません'); return; }
+    var busy = lsDraft.photos.length || lsDraft.name.trim();
+    if(rec.state !== 'failed' &&
+       !confirm('この商品は「出品できたか確認できていない」状態です。\nメルカリShopsに出ていないことを見てから出し直してください（二重出品の防止）。\n\n入力に戻しますか？')) return;
+    if(busy && !confirm('いま入力中の内容は消えます。よろしいですか？')) return;
+    lsDraft = Object.assign(lsBlank(), job.draft || {}, { photos: (job.payload.listing.images || []).slice() });
+    lsPendingDraftId = job.draftId || ''; lsPendingName = job.draftId ? job.name : '';
+    lsSave(); lsRenderAll();
+    lsJobDrop(at);
+    lsLogSet(at, { state: 'restored', msg: '' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast('入力に戻しました');
+    return;
+  }
+  if(act === 'remove'){
+    if(!confirm('この記録を消しますか？\n' + (rec.name || '') + '\n\n（控えの写真・入力も消えます）')) return;
+    lsJobDrop(at);
+    lsLogPut(lsLogGet().filter(function(r){ return r.at !== at; }));
+    return;
+  }
+
   btn.disabled = true; btn.textContent = '確認中…';
   lsAsk('checkListed', { sku: rec.sku || '', itemName: rec.name || '' })
     .then(function(res){
-      lsLogSet(at, { verified: !!res.listed, sku: res.sku || rec.sku || '', editUrl: lsShopsUrl(res.editUrl) || rec.editUrl || '' });
-      // 確認で✅になった商品が入力欄にまだ残っていれば白紙に戻す（出品時に確認が間に合わず⚠️で残った分の後始末。二重出品の防止）
-      var norm = function(t){ return String(t || '').replace(/\s+/g, ' ').trim(); };
+      var patch = { verified: !!res.listed, sku: res.sku || rec.sku || '', editUrl: lsShopsUrl(res.editUrl) || rec.editUrl || '' };
+      if(res.listed){ patch.state = 'done'; patch.msg = ''; lsJobDrop(at); }
+      lsLogSet(at, patch);
+      // 確認で✅になった商品が入力欄にまだ残っていれば白紙に戻す（二重出品の防止）
       var stillHere = res.listed && norm(rec.name) && norm(lsDraft.name) === norm(rec.name);
       if(stillHere){ lsDraft = lsBlank(lsDraft); lsSave(); lsRenderAll(); }
-      toast(res.listed ? '出品されています（フリマルの在庫にあります）' + (stillHere ? '　入力を白紙に戻しました' : '') : '⚠️ まだフリマルの在庫にありません。出し直しが必要です');
+      toast(res.listed ? '出品されています（フリマルの在庫にあります）' + (stillHere ? '　入力を白紙に戻しました' : '') : '⚠️ まだフリマルの在庫にありません。出ていなければ［戻す］で出し直せます');
     })
     .catch(function(e){ toast('確認できませんでした：' + (e.message || '')); })
     .finally(function(){ btn.disabled = false; btn.textContent = '確認'; });
@@ -505,6 +586,7 @@ function lsAsk(action, payload){
     if(res.error){
       if(/合言葉/.test(res.error)){ localStorage.removeItem(LS_PASS); showGate(); }
       var err = new Error(res.error);
+      err.fromWorker = true;
       err.stage = res.stage || ''; err.draftId = res.draftId || ''; err.alreadyListed = !!res.alreadyListed;
       throw err;
     }
@@ -519,6 +601,40 @@ function lsRenderPicked(id, label){
   el.hidden = false;
   el.textContent = '選択中：' + label;
 }
+
+/* よく使うカテゴリーはボタンで選ぶ（検索は呼び名がぴったり合わないと出ない：「ライトノベル」「画集」は0件）。
+ * IDはフリマルのカテゴリ検索で取得（2026-09-17）。ここに無いものは下の検索から */
+var LS_CATS = [
+  ['漫画（1冊〜・セット）', '本・雑誌・漫画 ＞ 漫画', [
+    ['7YpkuT6dpuj2AdCV2K9jAY', '青年漫画'], ['fXsVF9yvqyPEJ9N7NADEY8', '少年漫画'], ['pg8vJAHtuGJYvqTU9kSLa9', '少女漫画'],
+    ['Ks3Tatex33bwTE9hmmLeAH', '女性漫画'], ['Eb4Zbd52dh8LiXgA48tcKB', 'ボーイズラブ'], ['b3W44BjWpR4UQczQHpwxxi', '4コマ漫画'],
+    ['VPnsLbH6uY82YHuos6Kh4F', 'イラスト集'], ['FJC3aE5Lns4wtcDss78tvM', 'その他']]],
+  ['漫画の全巻セット', '本・雑誌・漫画 ＞ 漫画 ＞ 全巻セット', [
+    ['fgw7AV4WWXkt8dcvr3iPhg', '青年漫画'], ['hdCTHKPCUFTXpspi3yHFMS', '少年漫画'], ['DAgB3eZW8N6y6vNEDcnbxj', '少女漫画'],
+    ['iAEmVFgsB6uAUrqTgGtEiT', '女性漫画'], ['Tz8UXtb4zphNYDVo7bjgeU', 'ボーイズラブ'], ['9gmKYpGuHc8dvhAZMv7yMG', 'その他']]],
+  ['本', '本・雑誌・漫画 ＞ 本', [
+    ['PUNLitJTcwaPbTdGP79ubW', '文学・小説', '文学・小説（ラノベも）'], ['diQFoz63utK9GHeNVeLUZZ', 'アート・デザイン・音楽'],
+    ['5uaqz4Rtd5vuRrqLnS4bDH', 'ゲーム・攻略本'], ['DUmwdJEDRNCESGnnFJVGWE', '趣味・スポーツ・実用'],
+    ['Sr2koU8Gf7DwNyc7soe2NY', '絵本・児童書'], ['BuCQ4VjLpXbKk8wmgfHoq', 'タレント写真集'], ['FYarQjqPCXMapDAgfso5Gm', 'その他']]],
+];
+function lsRenderCatChips(){
+  var cur = lsDraft.category ? lsDraft.category.id : '';
+  $('lsCatChips').innerHTML = LS_CATS.map(function(g, gi){
+    return '<div class="lscatgrp">' + esc(g[0]) + '</div><div class="lscatchips">' +
+      g[2].map(function(c, ci){
+        return '<button type="button" class="lsdaychip' + (c[0] === cur ? ' on' : '') + '" data-g="' + gi + '" data-c="' + ci + '">' + esc(c[2] || c[1]) + '</button>';
+      }).join('') + '</div>';
+  }).join('');
+}
+$('lsCatChips').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(!b) return;
+  var g = LS_CATS[+b.getAttribute('data-g')], c = g[2][+b.getAttribute('data-c')];
+  lsDraft.category = { id: c[0], name: c[1], tree: g[1] + ' ＞ ' + c[1] };
+  lsSave();
+  lsRenderPicked('lsCatPicked', lsDraft.category.tree);
+  lsRenderCatChips();
+  $('lsCatList').innerHTML = ''; $('lsCatSearch').value = '';
+});
 
 var lsCatTimer = null;
 $('lsCatSearch').addEventListener('input', function(){
@@ -547,6 +663,7 @@ $('lsCatList').addEventListener('click', function(e){
   lsDraft.category = { id: b.getAttribute('data-id'), name: b.getAttribute('data-name'), tree: b.getAttribute('data-tree') || '' };
   lsSave();
   lsRenderPicked('lsCatPicked', lsDraft.category.tree || lsDraft.category.name);
+  lsRenderCatChips();
   $('lsCatList').innerHTML = '';
   $('lsCatSearch').value = '';
 });
@@ -618,9 +735,154 @@ $('lsSave').addEventListener('click', function(){
 /* 出品する（保存→自動値下げ→出品を Worker 1リクエストで。公開される操作なので直前に必ず確認する）
  * v3：赤字ストッパーは出品と同時にフリマルの下書き行（赤字STOP欄）へ確定させる（旧CSV書き込みは廃止）。
  *     出品で失敗した時は Worker が返す draftId を持ち、再実行は「同じ下書きID＋同じ商品名」だけを対象にする。
- *     （「一番新しい下書きを出品」は別の下書きを掴む事故があったので廃止） */
-var lsPendingDraftId = '';   // 前回、保存は済んで出品で失敗した下書きのID
+ *     （「一番新しい下書きを出品」は別の下書きを掴む事故があったので廃止）
+ * v8：出品は裏で進める。「出品する」を押したら入力を控え（端末のIndexedDB）に移して、すぐ白紙に戻す。
+ *     送るのは1件ずつ順番（フリマルの管理コード採番・下書きの特定が同時実行を想定していないため）。
+ *     成功と言えるのは従来どおり「在庫に実体が出た」時だけ。確認できない・失敗した商品は控えから［戻す］で入力に戻せる。 */
+var lsPendingDraftId = '';   // ［戻す］で入力に戻した商品が、保存だけ済んでいた時の下書きID
 var lsPendingName = '';
+var lsJobs = {};             // at → { at, name, price, payload, draftId, draft }（写真ごと持つ控え）
+var lsRunning = false;
+var lsWantReload = false;    // 出品中に新しい版が来た時は、終わってから読み直す
+var LS_WAITS = [20000, 20000, 30000, 30000, 40000, 40000];   // 反映待ちの見直し間隔（合計3分）
+
+/* 控えの保存先（写真が入るので localStorage には置けない） */
+var lsDbP = null;
+function lsDb(){
+  if(lsDbP) return lsDbP;
+  lsDbP = new Promise(function(ok, ng){
+    if(!window.indexedDB){ ng(new Error('no indexedDB')); return; }
+    var rq = indexedDB.open('shuppin-jobs', 1);
+    rq.onupgradeneeded = function(){ rq.result.createObjectStore('jobs', { keyPath: 'at' }); };
+    rq.onsuccess = function(){ ok(rq.result); };
+    rq.onerror = function(){ ng(rq.error); };
+  });
+  return lsDbP;
+}
+function lsDbRun(mode, fn){
+  return lsDb().then(function(db){
+    return new Promise(function(ok){
+      var out, tx = db.transaction('jobs', mode);
+      var rq = fn(tx.objectStore('jobs'));
+      if(rq) rq.onsuccess = function(){ out = rq.result; };
+      tx.oncomplete = function(){ ok(out); };
+      tx.onerror = tx.onabort = function(){ ok(undefined); };
+    });
+  }).catch(function(){ return undefined; });
+}
+function lsJobPut(job){ lsJobs[job.at] = job; return lsDbRun('readwrite', function(st){ st.put(job); }); }
+function lsJobDrop(at){ delete lsJobs[at]; return lsDbRun('readwrite', function(st){ st.delete(at); }); }
+function lsLogOne(at){ return lsLogGet().filter(function(r){ return r.at === at; })[0]; }
+function lsSleep(ms){ return new Promise(function(ok){ setTimeout(ok, ms); }); }
+
+/* 画面を消さない（消えるとiOSが通信を止めることがある）。使えない端末では何もしない */
+var lsWake = null;
+function lsWakeOn(){
+  if(lsWake || !navigator.wakeLock || document.hidden) return;
+  navigator.wakeLock.request('screen').then(function(w){
+    lsWake = w; w.addEventListener('release', function(){ lsWake = null; });
+  }).catch(function(){});
+}
+function lsWakeOff(){ if(lsWake){ try{ lsWake.release(); }catch(e){} lsWake = null; } }
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden) return;
+  if(lsRunning) lsWakeOn();
+  else if(lsLogGet().some(function(r){ return LS_ACTIVE[r.state]; })) lsKick();   // アプリに戻ってきたら順番待ちの続きを出す
+});
+window.addEventListener('online', function(){ if(lsLogGet().some(function(r){ return LS_ACTIVE[r.state]; })) lsKick(); });
+
+function lsJobDone(at, name, r){
+  lsLogSet(at, { state: 'done', verified: true, msg: '', sku: (r && r.sku) || (lsLogOne(at) || {}).sku || '',
+                 editUrl: lsShopsUrl(r && r.editUrl) || (lsLogOne(at) || {}).editUrl || '' });
+  lsJobDrop(at);
+  toast('出品しました：' + name);
+}
+function lsRunJob(rec){
+  var job = lsJobs[rec.at];
+  lsLogSet(rec.at, { state: 'sending', msg: '' });
+  var payload = Object.assign({}, job.payload);
+  if(job.draftId) payload.draftId = job.draftId;
+  return lsAskFull('listItem', payload)
+    .then(function(r){
+      if(r.verified){ lsJobDone(job.at, job.name, r); return; }
+      // フリマルは受け取ったが、メルカリShopsの商品になったことをまだ確認できていない。
+      // 反映はWorkerの40秒を超えることがある（9/13絶望先生・9/14なのは）ので、間をあけて見直す。成功とはまだ言わない
+      lsLogSet(job.at, { state: 'checking', sku: r.sku || '', editUrl: lsShopsUrl(r.editUrl), checkN: 0, nextCheck: Date.now() + LS_WAITS[0] });
+    })
+    .catch(function(e){
+      if(e.alreadyListed){ lsJobDone(job.at, job.name, null); return; }   // 前回の出品は成功していた
+      if(e.draftId) job.draftId = String(e.draftId);
+      else if(e.stage === 'save') job.draftId = '';
+      lsJobPut(job);
+      if(e.fromWorker){
+        lsLogSet(job.at, { state: 'failed', msg: '出品できませんでした：' + (e.message || '') });
+        toast('❌ 出品できませんでした：' + job.name);
+      }else{
+        // 通信が途中で切れた（アプリを閉じた・電波）。フリマル側では出品できている可能性があるので、まず［確認］
+        lsLogSet(job.at, { state: 'interrupted', msg: '通信が途中で切れました。［確認］で出品できているか見てください' });
+        toast('⚠️ 通信が切れました：' + job.name);
+        return 'stop';   // 順番待ちの商品まで巻き添えで送らない（アプリを閉じた瞬間に全部⚠️になるのを防ぐ）
+      }
+    });
+}
+function lsRunCheck(rec){
+  return lsAsk('checkListed', { sku: rec.sku || '', itemName: rec.name || '' })
+    .catch(function(){ return null; })
+    .then(function(res){
+      if(res && res.listed){ lsJobDone(rec.at, rec.name, res); return; }
+      var n = (rec.checkN || 0) + 1;
+      if(n >= LS_WAITS.length){
+        lsLogSet(rec.at, { state: 'unverified', msg: '3分待ってもフリマルの在庫に出たことを確認できませんでした。メルカリShopsを見てから［確認］を押してください' });
+        toast('⚠️ 出品を確認できませんでした：' + rec.name);
+      }else{
+        lsLogSet(rec.at, { checkN: n, nextCheck: Date.now() + LS_WAITS[n] });
+      }
+    });
+}
+function lsLoop(){
+  var list = lsLogGet().slice().reverse();   // 古い順
+  var due = list.filter(function(r){ return r.state === 'checking' && (r.nextCheck || 0) <= Date.now(); })[0];
+  if(due) return lsRunCheck(due).then(lsLoop);
+  var next = list.filter(function(r){ return r.state === 'queued' && lsJobs[r.at]; })[0];
+  if(next) return lsRunJob(next).then(function(stop){
+    if(stop !== 'stop') return lsLoop();
+    setTimeout(lsKick, 15000);   // 電波が戻っていれば続きから。アプリが閉じられていればこのタイマーは動かず、次に開いた時に続きから
+  });
+  if(list.some(function(r){ return r.state === 'checking'; })) return lsSleep(3000).then(lsLoop);
+  return Promise.resolve();
+}
+function lsKick(){
+  if(lsRunning) return;
+  lsRunning = true;
+  lsWakeOn();
+  lsLoop().catch(function(){}).then(function(){
+    lsRunning = false;
+    lsWakeOff();
+    lsLogRender();
+    if(lsWantReload) location.reload();
+  });
+}
+/* 起動時：前回の控えを読み戻す。送信の途中で閉じられたものは「確認が必要」に、順番待ちだったものは続きから出す */
+function lsJobsBoot(){
+  return lsDbRun('readonly', function(st){ return st.getAll(); }).then(function(all){
+    (all || []).forEach(function(j){ lsJobs[j.at] = j; });
+    var list = lsLogGet(), alive = {};
+    list.forEach(function(r){
+      alive[r.at] = 1;
+      if(r.state === 'sending'){ r.state = 'interrupted'; r.msg = '出品の途中でアプリが閉じられました。［確認］で出品できているか見てください'; }
+      else if(r.state === 'queued' && !lsJobs[r.at]){ r.state = 'failed'; r.msg = '控えが残っていません。入力し直してください'; }
+      else if(r.state === 'checking'){ r.nextCheck = 0; }
+    });
+    Object.keys(lsJobs).forEach(function(at){ if(!alive[at]) lsJobDrop(Number(at)); });   // 記録から流れた控えは片付ける
+    lsLogPut(list);
+    if(list.some(function(r){ return LS_ACTIVE[r.state]; })) lsKick();
+  });
+}
+window.addEventListener('beforeunload', function(e){
+  if(!lsRunning) return;
+  e.preventDefault(); e.returnValue = '';
+});
+
 $('lsPublish').addEventListener('click', function(){
   var missing = lsMissing();
   var price = parseInt(String(lsDraft.price || '').replace(/[^0-9]/g, ''), 10) || 0;
@@ -636,71 +898,39 @@ $('lsPublish').addEventListener('click', function(){
   var cost = parseInt(String(lsDraft.cost || '').replace(/[^0-9]/g, ''), 10);
   var sku = String(lsDraft.sku || '').trim();
   var name = lsDraft.name.trim();
+  var norm = function(t){ return String(t || '').replace(/\s+/g, ' ').trim(); };
+  // 同じ商品名がまだ裏で動いている・確認待ちなら止める（二重出品の防止）
+  var dup = lsLogGet().filter(function(r){ return (LS_ACTIVE[r.state] || LS_PROBLEM[r.state]) && norm(r.name) === norm(name); })[0];
+  if(dup){ toast('同じ商品名が「最近の出品」に残っています（' + (LS_STATE_LABEL[dup.state] || '') + '）。先にそちらを片付けてください'); return; }
   var retry = !!(lsPendingDraftId && lsPendingName === name);
   if(!confirm('フリマルに出品します。\n\n' + name + '\n販売価格 ¥' + price.toLocaleString() +
       '\n赤字ストッパー：' + (akaji !== '' ? '¥' + akaji.toLocaleString() : 'なし') +
       '\n自動値下げ：' + (pr.on ? lsPrSummary() : 'なし') +
       (retry ? '\n\n※前回保存した下書き（ID ' + lsPendingDraftId + '）を出品します' : '') +
-      '\n\nメルカリShopsに公開されます。よろしいですか？')) return;
+      '\n\nメルカリShopsに公開されます。よろしいですか？\n（出品は裏で進みます。すぐ次の商品を入力できます）')) return;
 
   var btn = this;
   btn.disabled = true;
-  btn.textContent = retry ? '出品しています…' : '保存して出品しています…';
-  var payload = {
-    listing: lsPayload(), price: price, akaji: akaji,
-    cost: isNaN(cost) ? '' : cost, sku: sku,
-    priceReduction: pr.on ? { weekdays: pr.days, time: String(pr.time || '20'), downYen: prYen } : null,
+  var at = Date.now();
+  var job = {
+    at: at, name: name, price: price, draftId: retry ? lsPendingDraftId : '',
+    payload: {
+      listing: lsPayload(), price: price, akaji: akaji,
+      cost: isNaN(cost) ? '' : cost, sku: sku,
+      priceReduction: pr.on ? { weekdays: pr.days, time: String(pr.time || '20'), downYen: prYen } : null,
+    },
+    draft: Object.assign({}, lsDraft, { photos: [] }),   // ［戻す］用。写真は payload.listing.images から戻す
   };
-  if(retry) payload.draftId = lsPendingDraftId;
-  lsAskFull('listItem', payload)
-    .then(function(r){
-      lsPendingDraftId = ''; lsPendingName = '';
-      var logAt = Date.now();
-      lsLogAdd({ at: logAt, name: name, price: price, sku: r.sku || '', verified: !!r.verified, editUrl: lsShopsUrl(r.editUrl) });
-      if(!r.verified){
-        // フリマルは受け取ったが、メルカリShopsの商品になったことをまだ確認できていない。
-        // 反映はWorkerの40秒を超えることがある（9/13絶望先生・9/14なのは：あとで［確認］すると✅）ので、
-        // アプリ側で間をあけて自動で見直す。見つからない時だけ⚠️。成功と言うと2026-09-07の再現なので入力は残す。
-        btn.textContent = '反映を待っています…（最長3分）';
-        toast('フリマルへの反映を待っています。このままお待ちください');
-        var waits = [20000, 20000, 30000, 30000, 40000, 40000];
-        var recheck = function(i){
-          if(i >= waits.length) return Promise.resolve(null);
-          return new Promise(function(ok){ setTimeout(ok, waits[i]); })
-            .then(function(){ return lsAsk('checkListed', { sku: r.sku || '', itemName: name }); })
-            .catch(function(){ return null; })
-            .then(function(res){ return (res && res.listed) ? res : recheck(i + 1); });
-        };
-        return recheck(0).then(function(res){
-          if(res){
-            lsLogSet(logAt, { verified: true, sku: res.sku || r.sku || '', editUrl: lsShopsUrl(res.editUrl) || lsShopsUrl(r.editUrl) });
-            toast('出品しました' + ((res.sku || r.sku) ? '（SKU：' + (res.sku || r.sku) + '）' : ''));
-            if(lsDraft.name.trim() === name){ lsDraft = lsBlank(lsDraft); lsSave(); lsRenderAll(); }
-            return;
-          }
-          alert('⚠️ 出品を受け付けましたが、3分待ってもフリマルの在庫に商品が出たことを確認できませんでした。\n\n' + name +
-                '\n\n入力は消していません。メルカリShopsの商品一覧に出ていないか見てから、下の「最近の出品」で［確認］を押してください。' +
-                '\nそれでも出ていなければ、もう一度「出品する」を押して出し直してください。');
-          toast('⚠️ 出品を確認できませんでした（入力は残してあります）');
-        });
-      }
-      toast('出品しました' + (r.sku ? '（SKU：' + r.sku + '）' : '') + (r.akaji != null ? '　赤字STOP ¥' + Number(r.akaji).toLocaleString() : ''));
-      lsDraft = lsBlank(lsDraft);
-      lsSave(); lsRenderAll();
-    })
-    .catch(function(e){
-      // 保存は済んで出品で失敗 → 同じ下書きに限定した再実行ができるように覚えておく
-      if(e.draftId){ lsPendingDraftId = String(e.draftId); lsPendingName = name; }
-      else if(e.stage === 'save'){ lsPendingDraftId = ''; lsPendingName = ''; }
-      if(e.alreadyListed){
-        // 前回の出品は成功していた → 二重出品しないよう入力を消す
-        toast(e.message || '既に出品済みです');
-        lsDraft = lsBlank(lsDraft); lsSave(); lsRenderAll();
-        return;
-      }
-      toast('出品できませんでした：' + (e.message || '') + (lsPendingDraftId ? '（下書きは保存済み。もう一度「出品する」で同じ下書きを出品します）' : ''));
-    })
-    .finally(function(){ btn.disabled = false; btn.textContent = '出品する'; });
+  // 控えを端末に書いてから入力を白紙にする（順番が逆だと、書けなかった時に入力が消える）
+  lsJobPut(job).then(function(){
+    lsPendingDraftId = ''; lsPendingName = '';
+    lsLogAdd({ at: at, name: name, price: price, sku: sku, verified: false, state: 'queued', editUrl: '' });
+    lsDraft = lsBlank(lsDraft);
+    lsSave(); lsRenderAll();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast('受け付けました。裏で出品します。次の商品をどうぞ');
+    lsKick();
+  }).finally(function(){ btn.disabled = false; });
 });
 
 $('lsClear').addEventListener('click', function(){
@@ -721,6 +951,7 @@ function lsRenderAll(){
   fillSelect($('lsDuration'), LS_DURATIONS, lsDraft.duration, '選択してください');
   fillSelect($('lsState'), LS_STATES, lsDraft.state, '選択してください');
   lsRenderPicked('lsCatPicked', lsDraft.category && (lsDraft.category.tree || lsDraft.category.name));
+  lsRenderCatChips();
   var shipEl = $('lsShipping');
   shipEl.innerHTML = '<option value="">選択してください</option>' +
     LS_SHIPPING.map(function(x){
@@ -768,6 +999,7 @@ $('lsSku').addEventListener('input', function(){ lsDraft.sku = this.value; lsSav
 /* ---------- 起動 ---------- */
 lsRenderAll();
 lsLogRender();
+lsJobsBoot();
 if(localStorage.getItem(LS_PASS)) showApp(); else showGate();
 
 if('serviceWorker' in navigator){
@@ -776,6 +1008,7 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if(reloaded) return;
     reloaded = true;
+    if(lsRunning){ lsWantReload = true; return; }   // 裏で出品している間は読み直さない（送信が切れる）
     location.reload();
   });
   window.addEventListener('load', function(){
