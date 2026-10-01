@@ -381,13 +381,14 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button class="hbtn" id="exportBtn" disabled>反映<span class="badge" id="chgBadge" hidden>0</span></button>
   </div>
   <div class="filemeta" id="fileMeta"></div>
+  <div class="fmjobbar" id="ptJobBar" hidden></div>
   <div class="fmjobbar" id="fmJobBar" hidden></div>
   <div class="sitetab" id="siteTab">
     <button data-site="pricetar" class="on">プライスター</button>
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v28</div>
+  <div class="ver">v29</div>
 </header>
 
 <div id="ptPane">
@@ -1349,7 +1350,7 @@ function openSheet(){
   var n = Object.keys(changes).length;
   $('sheetTitle').textContent = 'プライスターに反映する';
   $('doApply').textContent = 'プライスターに反映する';
-  $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（10秒ほど）。';
+  $('sheetDesc').textContent = '変更' + n + '件をプライスターに直接反映します（10秒ほど・裏で進みます）。';
   $('sheetDesc').hidden = false;
   $('applyStatus').hidden = true;
   $('applyStatus').innerHTML = '';
@@ -1490,8 +1491,8 @@ function fmWake(on){
 function fmJobEnd(){
   clearInterval(fmWatchTimer);
   fmWatchTimer = null;
-  fmWake(false);
-  if(fmReloadWanted) setTimeout(function(){ location.reload(); }, 1500);   // 反映中に届いた新しい版は終わってから読み直す
+  if(!ptJobBusy()) fmWake(false);
+  if(fmReloadWanted && !ptJobBusy()) setTimeout(function(){ location.reload(); }, 1500);   // 反映中に届いた新しい版は終わってから読み直す
 }
 
 function fmRenderJobBar(){
@@ -1663,30 +1664,72 @@ document.addEventListener('visibilitychange', function(){
 });
 setInterval(function(){ if(fmJob && fmJob.state === 'watching') fmRenderJobBar(); }, 1000);
 
-$('doApply').addEventListener('click', function(){
-  if(site === 'furimaru') return fmDoApply();
+/* プライスターへの反映も裏で進める（v29〜）。
+ * 押したらシートを閉じて、ヘッダー下の帯で ⏳送信中→✅/⚠️。その間も一覧の編集・タブ切替はできる。
+ * プライスターは1回の通信で結果まで返る（10秒ほど）ので、フリマルのような登録履歴の確認はいらない。 */
+var LS_PT_JOB = 'nesage-pt-job';
+var ptJob = (function(){
+  try{ return JSON.parse(localStorage.getItem(LS_PT_JOB) || 'null'); }catch(e){ return null; }
+})();
+function ptSaveJob(){
+  try{
+    if(ptJob) localStorage.setItem(LS_PT_JOB, JSON.stringify(ptJob));
+    else localStorage.removeItem(LS_PT_JOB);
+  }catch(e){}
+  ptRenderJobBar();
+}
+function ptJobBusy(){ return !!ptJob && ptJob.state === 'sending'; }
+function ptJobEnd(){
+  if(!fmJobBusy()) fmWake(false);
+  if(fmReloadWanted && !fmJobBusy()) setTimeout(function(){ location.reload(); }, 1500);
+}
+function ptRenderJobBar(){
+  var bar = $('ptJobBar');
+  if(!ptJob){ bar.hidden = true; bar.innerHTML = ''; return; }
+  var j = ptJob, cls = '', text = '', acts = '';
+  if(j.state === 'sending'){
+    text = '⏳ プライスターに反映中：' + j.n + '件（' + Math.round((Date.now() - j.startedAt) / 1000) + '秒・アプリは開いたままで）';
+  }else if(j.state === 'ok'){
+    cls = ' ok';
+    text = '✅ プライスターに反映しました：' + j.applied + '件' + (j.note ? '（' + j.note + '）' : '');
+    acts = '<button data-ptjob="close">OK</button>';
+  }else{
+    cls = ' ng';
+    text = '⚠️ ' + (j.msg || 'プライスターへの反映を確認できませんでした');
+    if(j.canRestore) acts += '<button data-ptjob="restore">戻す</button>';
+    acts += '<button data-ptjob="close">閉じる</button>';
+  }
+  bar.className = 'fmjobbar' + cls;
+  bar.innerHTML = '<span class="t">' + esc(text) + '</span>' + acts;
+  bar.hidden = false;
+}
+function ptDoApply(){
   var n = Object.keys(changes).length;
   if(!n) return;
   var pass = localStorage.getItem('nesage-pass');
   if(!pass){ toast('先に「☁️ 更新」で合言葉を入れてください'); return; }
-  if(!confirm('プライスターに ' + n + ' 件を反映します。よろしいですか？')) return;
+  if(ptJobBusy()){ toast('前の反映がまだ終わっていません。終わったら押せます（変更はそのまま残っています）'); return; }
+  if(!confirm('プライスターに ' + n + ' 件を反映します。よろしいですか？\n\n裏で進めるので、押したあとも作業を続けられます。')) return;
   var sent = changes;
-  lastApplyKinds = { price: false, stopper: false };
+  var kinds = { price: false, stopper: false };
   Object.keys(sent).forEach(function(sku){
     var c = sent[sku];
-    if(c.price != null && c.price !== '') lastApplyKinds.price = true;
-    if((c.akaji != null && c.akaji !== '') || (c.takane != null && c.takane !== '')) lastApplyKinds.stopper = true;
+    if(c.price != null && c.price !== '') kinds.price = true;
+    if((c.akaji != null && c.akaji !== '') || (c.takane != null && c.takane !== '')) kinds.stopper = true;
   });
-  var payload = JSON.stringify({ pass: pass, changes: sent });
-  var btn = this;
-  btn.disabled = true;
-  btn.textContent = '反映中…';
-  $('sheet').classList.add('applying');
-  showApplyProgress(n);
+  // 送った分は保留から外す（裏で反映中に、別の商品の値段を続けて直せるように）
+  changes = {};
+  saveChanges();
+  ptJob = { state: 'sending', n: n, changes: sent, startedAt: Date.now() };
+  ptSaveJob();
+  closeSheet();
+  refresh();
+  toast('裏でプライスターに反映しています。このまま作業を続けてOKです');
+  fmWake(true);
   fetch(APPLY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: payload,
+    body: JSON.stringify({ pass: pass, changes: sent }),
   })
     .then(function(r){ return r.json(); })
     .then(function(res){
@@ -1699,16 +1742,61 @@ $('doApply').addEventListener('click', function(){
         fileSource = '反映済み ' + new Date().toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
         idbPut('file', { bytes: fileBytes, name: fileName, at: importedAt, source: fileSource });
       }catch(e){}
-      changes = {};
-      saveChanges();
       refresh();
-      showApplyResult(res, null);
+      var notes = [];
+      if(res.errorCount) notes.push('エラー' + res.errorCount + '件' + (res.errorRows && res.errorRows.length ? '：' + (res.errorRows[0].reason || '') : ''));
+      if(res.missing && res.missing.length) notes.push('在庫に無かった商品' + res.missing.length + '件');
+      if(res.conflicts && res.conflicts.length) notes.push('設定の矛盾で送らなかった商品' + res.conflicts.length + '件');
+      if(kinds.stopper && !kinds.price) notes.push('ストッパーだけ変えた商品は次の自動改定で値段が動きます');
+      ptJob = { state: 'ok', n: n, applied: res.applied != null ? res.applied : 0, note: notes.join('・'), startedAt: ptJob.startedAt };
+      ptSaveJob();
+      ptJobEnd();
     })
     .catch(function(e){
-      showApplyResult(null, e.message || '通信に失敗しました');
-      btn.disabled = false;
-      btn.textContent = (site === 'furimaru' ? 'フリマル' : 'プライスター') + 'に反映する';
+      ptJob.state = 'ng';
+      // 通信が途中で切れた時は、プライスターに届いたかどうか分からない
+      ptJob.msg = (e instanceof TypeError)
+        ? '通信が途中で切れました。プライスターに届いたか分からないので、「☁️ 更新」で値段を確かめてから必要なら［戻す］で出し直してください'
+        : '反映できませんでした：' + (e.message || '通信に失敗しました') + '（［戻す］で変更を保留に戻せます）';
+      ptJob.canRestore = true;
+      ptSaveJob();
+      ptJobEnd();
     });
+}
+/* 失敗した分を保留の変更に戻す。裏で反映中に同じ商品をもう一度直していたら、そっち（新しい方）を残す */
+function ptRestoreJob(){
+  if(!ptJob || !ptJob.changes) return;
+  var back = 0;
+  Object.keys(ptJob.changes).forEach(function(sku){
+    if(!changes[sku]){ changes[sku] = ptJob.changes[sku]; back++; }
+  });
+  saveChanges();
+  ptJob = null;
+  ptSaveJob();
+  refresh();
+  toast(back + '件を保留の変更に戻しました。もう一度「反映」できます');
+}
+/* 開き直した時：送信の途中で閉じていたら⚠️（届いたか分からない） */
+function ptResumeJob(){
+  if(ptJob && ptJob.state === 'sending'){
+    ptJob.state = 'ng';
+    ptJob.msg = '反映の途中でアプリが閉じました。プライスターに届いたか分からないので、「☁️ 更新」で値段を確かめてから必要なら［戻す］で出し直してください';
+    ptJob.canRestore = true;
+  }
+  ptSaveJob();
+}
+$('ptJobBar').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-ptjob]');
+  if(!b) return;
+  if(b.getAttribute('data-ptjob') === 'restore') return ptRestoreJob();
+  ptJob = null;
+  ptSaveJob();
+});
+setInterval(function(){ if(ptJobBusy()) ptRenderJobBar(); }, 1000);
+
+$('doApply').addEventListener('click', function(){
+  if(site === 'furimaru') return fmDoApply();
+  ptDoApply();
 });
 function closeSheet(){
   clearInterval(applyTimer);
@@ -2091,6 +2179,7 @@ window.addEventListener('resize', lsFit);
 loadChanges();
 fmLoadChanges();
 fmResumeJob();
+ptResumeJob();
 idbGet('fm-file').then(function(saved){
   if(saved && saved.bytes){
     try{
@@ -2118,7 +2207,7 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if(reloaded) return;
     reloaded = true;
-    if(fmJobBusy()){ fmReloadWanted = true; return; }   // フリマル反映中は読み直さない（終わってから）
+    if(fmJobBusy() || ptJobBusy()){ fmReloadWanted = true; return; }   // 反映中は読み直さない（終わってから）
     location.reload();
   });
   window.addEventListener('load', function(){
