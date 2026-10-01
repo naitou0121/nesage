@@ -359,6 +359,13 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 @media (prefers-reduced-motion: reduce){
   *{transition-duration:.01ms !important}
 }
+.fmjobbar{margin-top:6px;border-radius:8px;padding:6px 8px 6px 10px;font-size:.78rem;font-weight:800;
+  background:rgba(255,255,255,.94);color:var(--orange-deep);display:flex;align-items:center;gap:6px}
+.fmjobbar .t{flex:1;min-width:0}
+.fmjobbar.ok{color:var(--green)}
+.fmjobbar.ng{background:#fff3f2;color:var(--red);border:1.5px solid #e0a8a4}
+.fmjobbar button{flex:none;min-height:30px;padding:3px 10px;border-radius:999px;font-size:.76rem;font-weight:800;
+  background:#fff;border:1.5px solid currentColor}
 #lsPane{height:calc(100dvh - 120px)}
 #lsFrame{display:block;width:100%;height:100%;border:0;background:transparent}
 body.lsmode{padding-bottom:0;overflow:hidden}
@@ -374,12 +381,13 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button class="hbtn" id="exportBtn" disabled>反映<span class="badge" id="chgBadge" hidden>0</span></button>
   </div>
   <div class="filemeta" id="fileMeta"></div>
+  <div class="fmjobbar" id="fmJobBar" hidden></div>
   <div class="sitetab" id="siteTab">
     <button data-site="pricetar" class="on">プライスター</button>
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v27</div>
+  <div class="ver">v28</div>
 </header>
 
 <div id="ptPane">
@@ -1453,19 +1461,80 @@ function openFmSheet(){
   $('sheet').classList.add('show');
 }
 
+/* フリマルへの反映は裏で進める（v28〜）。
+ * 押したらシートを閉じて、送信→フリマルの登録履歴で完了確認までを裏で回す。その間も一覧の編集・タブ切替はそのままできる。
+ * 状態は localStorage（nesage-fm-job）に残すので、アプリを開き直しても確認の続きから見る。
+ * 同時に走らせるのは1件だけ（フリマルの一括編集は予約単位で処理されるため、前の分が終わってから次を送る）。 */
+var LS_FM_JOB = 'nesage-fm-job';
+var fmJob = (function(){
+  try{ return JSON.parse(localStorage.getItem(LS_FM_JOB) || 'null'); }catch(e){ return null; }
+})();
+var fmWatchTimer = null, fmWakeLock = null, fmReloadWanted = false;
+var FM_WATCH_LIMIT = 6 * 60 * 1000;   // 受付から6分見て決着しなければ「確認できず」
+function fmSaveJob(){
+  try{
+    if(fmJob) localStorage.setItem(LS_FM_JOB, JSON.stringify(fmJob));
+    else localStorage.removeItem(LS_FM_JOB);
+  }catch(e){}
+  fmRenderJobBar();
+}
+function fmJobBusy(){ return !!fmJob && (fmJob.state === 'sending' || fmJob.state === 'watching'); }
+function fmWake(on){
+  try{
+    if(on && !fmWakeLock && navigator.wakeLock){
+      navigator.wakeLock.request('screen').then(function(l){ fmWakeLock = l; l.addEventListener('release', function(){ fmWakeLock = null; }); }).catch(function(){});
+    }
+    if(!on && fmWakeLock){ fmWakeLock.release(); fmWakeLock = null; }
+  }catch(e){}
+}
+function fmJobEnd(){
+  clearInterval(fmWatchTimer);
+  fmWatchTimer = null;
+  fmWake(false);
+  if(fmReloadWanted) setTimeout(function(){ location.reload(); }, 1500);   // 反映中に届いた新しい版は終わってから読み直す
+}
+
+function fmRenderJobBar(){
+  var bar = $('fmJobBar');
+  if(!fmJob){ bar.hidden = true; bar.innerHTML = ''; return; }
+  var j = fmJob, cls = '', text = '', acts = '';
+  var sec = Math.round((Date.now() - (j.acceptedAt || j.startedAt)) / 1000);
+  if(j.state === 'sending'){
+    text = '⏳ フリマルに送信中：' + j.n + '件（裏で進めています・アプリは開いたままで）';
+  }else if(j.state === 'watching'){
+    text = '⏳ フリマルで処理中：' + (j.sentCount != null ? j.sentCount : j.n) + '件（' + sec + '秒）';
+  }else if(j.state === 'ok'){
+    cls = ' ok';
+    text = '✅ フリマルに反映しました：' + j.done + '件（失敗0）';
+    acts = '<button data-fmjob="close">OK</button>';
+  }else{
+    cls = ' ng';
+    text = '⚠️ ' + (j.msg || 'フリマルへの反映を確認できませんでした');
+    if(j.canRestore) acts += '<button data-fmjob="restore">戻す</button>';
+    acts += '<button data-fmjob="close">閉じる</button>';
+  }
+  bar.className = 'fmjobbar' + cls;
+  bar.innerHTML = '<span class="t">' + esc(text) + '</span>' + acts;
+  bar.hidden = false;
+}
+
 function fmDoApply(){
   var n = Object.keys(fmChanges).length;
   if(!n) return;
   var pass = localStorage.getItem(LS_PASS);
   if(!pass){ toast('先にプライスタータブで「☁️ 更新」して合言葉を入れてください'); return; }
-  if(!confirm('フリマルに ' + n + ' 件を反映します。よろしいですか？')) return;
+  if(fmJobBusy()){ toast('前の反映をフリマルで処理中です。終わったら押せます（変更はそのまま残っています）'); return; }
+  if(!confirm('フリマルに ' + n + ' 件を反映します。よろしいですか？\n\n裏で進めるので、押したあとも作業を続けられます。')) return;
   var sent = fmChanges;
-  var btn = $('doApply');
-  btn.disabled = true;
-  btn.textContent = '反映中…';
-  $('sheet').classList.add('applying');
-  lastApplyKinds = { price: false, stopper: false };
-  showApplyProgress(n);
+  // 送った分は保留から外す（裏で反映中に、別の商品の値段を続けて直せるように）
+  fmChanges = {};
+  fmSaveChanges();
+  fmJob = { state: 'sending', n: n, changes: sent, startedAt: Date.now() };
+  fmSaveJob();
+  closeSheet();
+  fmRefresh();
+  toast('裏でフリマルに反映しています。このまま作業を続けてOKです');
+  fmWake(true);
   fetch(APPLY_URL, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pass: pass, site: 'furimaru', changes: sent }),
@@ -1479,101 +1548,120 @@ function fmDoApply(){
         fmParsed = FM.parseFile(fmBytes);
         idbPut('fm-file', { bytes: fmBytes, at: fmAt });
       }catch(e){}
-      fmChanges = {};
-      fmSaveChanges();
       fmRefresh();
-      clearInterval(applyTimer);
-      $('sheetDesc').hidden = true;
-      $('applyList').hidden = true;
-      $('doApply').hidden = true;
-      $('clearChanges').hidden = true;
       // ここではまだ「受け付けた」だけ。フリマルの登録履歴を見て完了を確かめる
-      fmWatchApply(res.reserveId, res.applied);
+      fmJob.state = 'watching';
+      fmJob.reserveId = res.reserveId || null;
+      fmJob.sentCount = res.applied != null ? res.applied : n;
+      fmJob.acceptedAt = Date.now();
+      delete fmJob.changes;   // 受け付けた後は戻さない（手元の値段はもう新しい方になっている）
+      fmSaveJob();
+      fmWatchApply();
     })
     .catch(function(e){
-      showApplyResult(null, e.message || '通信に失敗しました');
-      btn.disabled = false;
-      btn.textContent = (site === 'furimaru' ? 'フリマル' : 'プライスター') + 'に反映する';
+      fmJob.state = 'ng';
+      fmJob.msg = '反映できませんでした：' + (e.message || '通信に失敗しました') + '（［戻す］で変更を保留に戻せます）';
+      fmJob.canRestore = true;
+      fmSaveJob();
+      fmJobEnd();
     });
+}
+
+/* 失敗した分を保留の変更に戻す。裏で反映中に同じ商品をもう一度直していたら、そっち（新しい方）を残す */
+function fmRestoreJob(){
+  if(!fmJob || !fmJob.changes) return;
+  var back = 0;
+  Object.keys(fmJob.changes).forEach(function(id){
+    if(!fmChanges[id]){ fmChanges[id] = fmJob.changes[id]; back++; }
+  });
+  fmSaveChanges();
+  fmJob = null;
+  fmSaveJob();
+  fmRefresh();
+  toast(back + '件を保留の変更に戻しました。もう一度「反映」できます');
 }
 
 /* フリマルは非同期処理。登録履歴（ReserveId）を見に行って、
  * 「完了◯件・失敗◯件」を確かめてから✅を出す。確かめられないうちは✅を出さない。 */
-var fmWatchTimer = null;
-function fmWatchApply(reserveId, sentCount){
+function fmWatchApply(){
   clearInterval(fmWatchTimer);
+  if(!fmJob || fmJob.state !== 'watching') return;
   var pass = localStorage.getItem(LS_PASS);
-  var started = Date.now();
-  var LIMIT = 6 * 60 * 1000;   // 6分見て決着しなければ「確認できず」で止める
-  var box = function(cls, big, head, note){
-    $('applyStatus').hidden = false;
-    $('sheet').classList.remove('applying');
-    $('applyStatus').innerHTML =
-      '<div class="applybox ' + cls + '">' +
-        '<div class="applybig">' + big + '</div>' +
-        '<div class="applyres ' + cls + '">' + head + '</div>' +
-        '<div class="applynote">' + note + '</div>' +
-      '</div>';
+  var finish = function(state, msg, extra){
+    fmJob.state = state;
+    fmJob.msg = msg;
+    if(extra) Object.keys(extra).forEach(function(k){ fmJob[k] = extra[k]; });
+    fmSaveJob();
+    fmJobEnd();
   };
-  var waiting = function(){
-    var sec = Math.round((Date.now() - started) / 1000);
-    $('applyStatus').hidden = false;
-    $('applyStatus').innerHTML =
-      '<div class="applybox">' +
-        '<div class="spinner"></div>' +
-        '<div class="applystep">フリマルで処理中…（' + sec + '秒）</div>' +
-        '<div class="applynote"><b>' + sentCount + '件</b>を受け付けました。<br>' +
-        'フリマル側の反映を確かめています（1〜2分）。<br>この画面を閉じずにお待ちください</div>' +
-      '</div>';
-  };
-  waiting();
-  if(!reserveId){
-    box('ok', '✅', 'フリマルに送信しました',
-      '<b>' + sentCount + '件</b>を受け付けました。<br>結果の確認ができませんでした。<br>しばらくしてから「☁️ 更新」で確かめてください。');
+  if(!fmJob.reserveId){
+    finish('ng', fmJob.sentCount + '件を受け付けましたが、結果を確認できませんでした。しばらくしてから「☁️ 更新」で確かめてください');
     return;
   }
+  fmWake(true);
+  var busy = false;
   var tick = function(){
-    if(Date.now() - started > LIMIT){
-      clearInterval(fmWatchTimer);
-      box('ng', '⚠️', '結果を確認できませんでした',
-        'フリマルの処理が6分たっても終わりませんでした。<br>フリマルの「CSVで一括編集 → 4.登録履歴」を直接見てください。');
+    if(!fmJob || fmJob.state !== 'watching' || busy) return;
+    fmRenderJobBar();
+    if(Date.now() - fmJob.acceptedAt > FM_WATCH_LIMIT){
+      finish('ng', 'フリマルの処理が6分たっても終わりませんでした。フリマルの「CSVで一括編集 → 4.登録履歴」を直接見てください');
       return;
     }
+    busy = true;
     fetch(APPLY_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pass: pass, site: 'furimaru', action: 'applyStatus', reserveId: reserveId }),
+      body: JSON.stringify({ pass: pass, site: 'furimaru', action: 'applyStatus', reserveId: fmJob.reserveId }),
     })
       .then(function(r){ return r.json(); })
       .then(function(st){
+        busy = false;
         if(st.error) throw new Error(st.error);
-        if(!st.found){ waiting(); return; }
+        if(!fmJob || fmJob.state !== 'watching' || !st.found) return;
         if(st.status === '完了'){
-          clearInterval(fmWatchTimer);
           var failed = st.failed || 0;
           if(failed > 0){
-            box('ng', '⚠️', 'フリマルで' + failed + '件が失敗しました',
-              '完了 <b>' + (st.done != null ? st.done : '-') + '件</b> / 失敗 <b>' + failed + '件</b>（送った ' + (st.total != null ? st.total : sentCount) + '件）<br><br>' +
-              'フリマルの「CSVで一括編集 → 4.登録履歴」の<b>エラー詳細</b>で中身を確認してください。');
+            finish('ng', 'フリマルで' + failed + '件が失敗しました（完了' + (st.done != null ? st.done : '-') + '件）。「CSVで一括編集 → 4.登録履歴」のエラー詳細を見てください');
           }else{
-            box('ok', '✅', 'フリマルへの反映が完了しました',
-              '<b>' + (st.done != null ? st.done : sentCount) + '件</b>を反映しました（失敗0件）<br>' +
-              '完了時刻 ' + (st.endAt || '') + '<br><br>「☁️ 更新」を押すと、反映後の値段で一覧が出ます。');
+            finish('ok', '', { done: st.done != null ? st.done : fmJob.sentCount, endAt: st.endAt || '' });
           }
           return;
         }
         if(st.status === 'エラー'){
-          clearInterval(fmWatchTimer);
-          box('ng', '⚠️', 'フリマル側でエラーになりました',
-            'フリマルの「CSVで一括編集 → 4.登録履歴」のエラー詳細を確認してください。');
-          return;
+          finish('ng', 'フリマル側でエラーになりました。「CSVで一括編集 → 4.登録履歴」のエラー詳細を見てください');
         }
-        waiting();
       })
-      .catch(function(e){ waiting(); });
+      .catch(function(){ busy = false; });
   };
   fmWatchTimer = setInterval(tick, 12000);
-  setTimeout(tick, 8000);
+  setTimeout(tick, Math.max(0, 8000 - (Date.now() - fmJob.acceptedAt)));
+  fmWatchApply.tick = tick;
 }
+
+/* 開き直した時：送信の途中で閉じていたら⚠️（受け付けられたか分からない）、確認中なら続きから見る */
+function fmResumeJob(){
+  if(!fmJob){ fmRenderJobBar(); return; }
+  if(fmJob.state === 'sending'){
+    fmJob.state = 'ng';
+    fmJob.msg = '送信の途中でアプリが閉じました。フリマルに届いたか分からないので、「☁️ 更新」で値段を確かめてから必要なら［戻す］で出し直してください';
+    fmJob.canRestore = true;
+    fmSaveJob();
+    return;
+  }
+  fmRenderJobBar();
+  if(fmJob.state === 'watching') fmWatchApply();
+}
+$('fmJobBar').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-fmjob]');
+  if(!b) return;
+  if(b.getAttribute('data-fmjob') === 'restore') return fmRestoreJob();
+  fmJob = null;
+  fmSaveJob();
+});
+// 前面に戻った時はすぐ確認する（裏にいる間はiOSがタイマーを止めるため）
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden && fmJob && fmJob.state === 'watching' && fmWatchApply.tick) fmWatchApply.tick();
+});
+setInterval(function(){ if(fmJob && fmJob.state === 'watching') fmRenderJobBar(); }, 1000);
 
 $('doApply').addEventListener('click', function(){
   if(site === 'furimaru') return fmDoApply();
@@ -1624,7 +1712,6 @@ $('doApply').addEventListener('click', function(){
 });
 function closeSheet(){
   clearInterval(applyTimer);
-  clearInterval(fmWatchTimer);
   $('sheetBack').classList.remove('show');
   $('sheet').classList.remove('show');
   $('sheet').classList.remove('applying');
@@ -2003,6 +2090,7 @@ window.addEventListener('resize', lsFit);
 /* ---------- 起動 ---------- */
 loadChanges();
 fmLoadChanges();
+fmResumeJob();
 idbGet('fm-file').then(function(saved){
   if(saved && saved.bytes){
     try{
@@ -2030,6 +2118,7 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if(reloaded) return;
     reloaded = true;
+    if(fmJobBusy()){ fmReloadWanted = true; return; }   // フリマル反映中は読み直さない（終わってから）
     location.reload();
   });
   window.addEventListener('load', function(){
