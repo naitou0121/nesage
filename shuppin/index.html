@@ -156,7 +156,7 @@ html:not(.embed) #lsOpenStep2{display:none}
 <header>
   <div class="hrow">
     <h1>🛍️ フリマル出品</h1>
-    <div class="ver">v9</div>
+    <div class="ver">v10</div>
   </div>
   <div class="qbar" id="lsQueueBar" hidden></div>
 </header>
@@ -180,7 +180,7 @@ html:not(.embed) #lsOpenStep2{display:none}
   <div class="lsbody">
     <div class="lsnote">写真を選んで内容を書いたら<b>「出品する」だけでアプリから出品まで完結</b>します。<br>
       出品は<b>裏で進む</b>ので、押したらすぐ次の商品を入力してOKです（結果は上の帯と、下の「最近の出品」に出ます）。<br>
-      ※出品が終わるまで<b>このアプリは開いたまま</b>にしてください。</div>
+      送信が済めば<b>アプリを閉じても・他のアプリを開いても出品は続きます</b>（フリマルへの出品はクラウド側が進めます）。</div>
 
     <div class="lssec">
       <div class="lslabel">商品の写真 <span class="lsreq">必須</span><span class="lscount" id="lsPhotoCount"></span></div>
@@ -366,9 +366,13 @@ function lsShopsListUrl(list){
   return saved;
 }
 /* 出品の状態（v8：裏で出品）。state が無い古い記録は verified だけで ✅/⚠️ を決める */
-var LS_ACTIVE = { queued: 1, sending: 1, checking: 1 };
+/* v10：出品はクラウド（Worker の列）が進める。端末側の状態は queued（送信待ち）→ sending（写真を送っている）→ remote（預けた。閉じてもOK）。
+ * remote の間の細かい進み（順番待ち／出品中／反映待ち）は rstate にクラウド側の状態を写す */
+var LS_ACTIVE = { queued: 1, sending: 1, remote: 1, checking: 1 };
 var LS_PROBLEM = { failed: 1, unverified: 1, interrupted: 1 };
-var LS_STATE_LABEL = { queued: '⏳ 順番待ち', sending: '⏳ 出品中…', checking: '⏳ 反映待ち', failed: '❌', unverified: '⚠️', interrupted: '⚠️', restored: '↩︎ 戻した' };
+var LS_STATE_LABEL = { queued: '⏳ 送信待ち', sending: '📤 送信中…', remote: '⏳ 裏で出品中', checking: '⏳ 反映待ち', failed: '❌', unverified: '⚠️', interrupted: '⚠️', restored: '↩︎ 戻した' };
+var LS_RSTATE_LABEL = { queued: '⏳ 順番待ち', running: '⏳ 出品中…', checking: '⏳ 反映待ち', watching: '⏳ 反映待ち' };
+function lsLabel(r){ return (r.state === 'remote' && LS_RSTATE_LABEL[r.rstate]) || LS_STATE_LABEL[r.state] || (r.verified ? '✅' : '⚠️'); }
 function lsLogRender(){
   var list = lsLogGet();
   var box = $('lsLogBox');
@@ -382,7 +386,7 @@ function lsLogRender(){
     var ok = r.verified;
     var ed = lsShopsUrl(r.editUrl);
     var st = r.state || '';
-    var label = LS_STATE_LABEL[st] || (ok ? '✅' : '⚠️');
+    var label = lsLabel(r);
     var cls = LS_ACTIVE[st] ? 'wait' : (ok && !LS_PROBLEM[st] ? 'ok' : 'ng');
     var hasJob = true;   // 控えは押した時に読みにいく（別の画面で積んだ分はメモリに無いことがある）
     var btn = function(act, text){ return '<button data-at="' + r.at + '" data-act="' + act + '">' + text + '</button>'; };
@@ -411,10 +415,11 @@ function lsBarRender(list){
   if(!active.length && !ng.length){ bar.hidden = true; return; }
   bar.hidden = false;
   bar.className = 'qbar' + (ng.length ? ' ng' : '');
-  var now = active.filter(function(r){ return r.state === 'sending'; })[0];
+  var up = active.filter(function(r){ return r.state === 'sending'; })[0];
+  var now = active.filter(function(r){ return r.state === 'remote' && r.rstate === 'running'; })[0];
   bar.textContent =
     (ng.length ? '⚠️ 出品できていない商品が' + ng.length + '件（タップで確認）' + (active.length ? '／' : '') : '') +
-    (active.length ? '⏳ 裏で出品中：' + active.length + '件' + (now ? '（いま：' + now.name + '）' : '') : '');
+    (active.length ? (up ? '📤 送信中：' + up.name + '（送り終わるまで開いたまま）' : '⏳ 裏で出品中：' + active.length + '件' + (now ? '（いま：' + now.name + '）' : '') + '　閉じてもOK') : '');
 }
 $('lsQueueBar').addEventListener('click', function(){ $('lsLogBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 
@@ -429,7 +434,7 @@ document.addEventListener('click', function(ev){
   if(act === 'retry'){
     lsJobGet(at).then(function(job){
       if(!job){ toast('控えが残っていません。入力し直してください'); return; }
-      lsLogSet(at, { state: 'queued', msg: '' });
+      lsLogSet(at, { state: 'queued', rstate: '', msg: '', jid: '' });
       toast('もう一度、裏で出品します');
       lsKick();
     });
@@ -472,6 +477,7 @@ function lsCheckRow(btn, at, rec){
       // 確認で✅になった商品が入力欄にまだ残っていれば白紙に戻す（二重出品の防止）
       var stillHere = res.listed && norm(rec.name) && norm(lsDraft.name) === norm(rec.name);
       if(stillHere){ lsDraft = lsBlank(lsDraft); lsSave(); lsRenderAll(); }
+      if(!res.listed && LS_PROBLEM[rec.state]) lsLogSet(at, { msg: 'フリマルの在庫にありません（下書きにも無ければ出品されていません）。［戻す］で入力に戻して出し直してください' });
       toast(res.listed ? '出品されています（フリマルの在庫にあります）' + (stillHere ? '　入力を白紙に戻しました' : '') : '⚠️ まだフリマルの在庫にありません。出ていなければ［戻す］で出し直せます');
     })
     .catch(function(e){ toast('確認できませんでした：' + (e.message || '')); })
@@ -754,6 +760,8 @@ $('lsSave').addEventListener('click', function(){
  * v3：赤字ストッパーは出品と同時にフリマルの下書き行（赤字STOP欄）へ確定させる（旧CSV書き込みは廃止）。
  *     出品で失敗した時は Worker が返す draftId を持ち、再実行は「同じ下書きID＋同じ商品名」だけを対象にする。
  *     （「一番新しい下書きを出品」は別の下書きを掴む事故があったので廃止）
+ * v10：出品はクラウド（Worker の列）が進める。端末は写真ごと「預ける」通信を1回するだけ。預けたあとはアプリを閉じても・他のアプリを開いても続く。
+ *      同じ仕事IDはクラウドが1回しか受けないので、電波が切れて二度送っても二重出品にならない。結果は開いた時に聞きに行く（status）。
  * v8：出品は裏で進める。「出品する」を押したら入力を控え（端末のIndexedDB）に移して、すぐ白紙に戻す。
  *     送るのは1件ずつ順番（フリマルの管理コード採番・下書きの特定が同時実行を想定していないため）。
  *     成功と言えるのは従来どおり「在庫に実体が出た」時だけ。確認できない・失敗した商品は控えから［戻す］で入力に戻せる。 */
@@ -762,7 +770,7 @@ var lsPendingName = '';
 var lsJobs = {};             // at → { at, name, price, payload, draftId, draft }（写真ごと持つ控え）
 var lsRunning = false;
 var lsWantReload = false;    // 出品中に新しい版が来た時は、終わってから読み直す
-var LS_WAITS = [20000, 20000, 30000, 30000, 40000, 40000];   // 反映待ちの見直し間隔（合計3分）
+var LS_POLL_MS = 5000;        // 預けた仕事の結果を聞く間隔（アプリが前にある時だけ）
 
 /* 控えの保存先（写真が入るので localStorage には置けない） */
 var lsDbP = null;
@@ -797,24 +805,15 @@ function lsJobDrop(at){ delete lsJobs[at]; return lsDbRun('readwrite', function(
 function lsLogOne(at){ return lsLogGet().filter(function(r){ return r.at === at; })[0]; }
 function lsSleep(ms){ return new Promise(function(ok){ setTimeout(ok, ms); }); }
 
-/* 画面を消さない（消えるとiOSが通信を止めることがある）。使えない端末では何もしない */
-var lsWake = null;
-function lsWakeOn(){
-  if(lsWake || !navigator.wakeLock || document.hidden) return;
-  navigator.wakeLock.request('screen').then(function(w){
-    lsWake = w; w.addEventListener('release', function(){ lsWake = null; });
-  }).catch(function(){});
-}
-function lsWakeOff(){ if(lsWake){ try{ lsWake.release(); }catch(e){} lsWake = null; } }
+/* 前に戻ってきた時・電波が戻った時：送信待ちがあれば送る／預けた分の結果を聞く */
 document.addEventListener('visibilitychange', function(){
   if(document.hidden) return;
-  if(lsRunning) lsWakeOn();
-  else if(lsLogGet().some(function(r){ return LS_ACTIVE[r.state]; })) lsKick();   // アプリに戻ってきたら順番待ちの続きを出す
+  if(lsLogGet().some(function(r){ return LS_ACTIVE[r.state]; })) lsKick();
 });
 window.addEventListener('online', function(){ if(lsLogGet().some(function(r){ return LS_ACTIVE[r.state]; })) lsKick(); });
 
 function lsJobDone(at, name, r){
-  lsLogSet(at, { state: 'done', verified: true, msg: '', sku: (r && r.sku) || (lsLogOne(at) || {}).sku || '',
+  lsLogSet(at, { state: 'done', rstate: '', verified: true, msg: '', sku: (r && r.sku) || (lsLogOne(at) || {}).sku || '',
                  editUrl: lsShopsUrl(r && r.editUrl) || (lsLogOne(at) || {}).editUrl || '' });
   lsJobDrop(at);
   toast('出品しました：' + name);
@@ -825,99 +824,142 @@ function lsRunJob(rec){
     return lsSendJob(job);
   });
 }
+/* 預ける：写真ごと1回だけ送る。仕事ID＝at＋送信回数（［もう一度］は新しいIDで預け直す）。
+ * 返事が来なかった（電波・アプリを閉じた）時は queued のまま残し、次に開いた時に同じIDで送り直す＝クラウド側が重複を弾くので安全 */
+var lsUploading = false;
 function lsSendJob(job){
-  lsLogSet(job.at, { state: 'sending', msg: '' });
+  var rec = lsLogOne(job.at) || {};
+  var jid = rec.jid || (String(job.at) + '-' + ((rec.sendN || 0) + 1));
+  lsLogSet(job.at, { state: 'sending', jid: jid, sendN: (rec.sendN || 0) + (rec.jid ? 0 : 1), msg: '' });
   var payload = Object.assign({}, job.payload);
   if(job.draftId) payload.draftId = job.draftId;
-  return lsAskFull('listItem', payload)
+  lsUploading = true;
+  return lsAskFull('enqueue', { op: 'job', id: jid, kind: 'listItem', name: job.name, body: payload })
     .then(function(r){
-      if(r.verified){ lsJobDone(job.at, job.name, r); return; }
-      // フリマルは受け取ったが、メルカリShopsの商品になったことをまだ確認できていない。
-      // 反映はWorkerの40秒を超えることがある（9/13絶望先生・9/14なのは）ので、間をあけて見直す。成功とはまだ言わない
-      lsLogSet(job.at, { state: 'checking', sku: r.sku || '', editUrl: lsShopsUrl(r.editUrl), checkN: 0, nextCheck: Date.now() + LS_WAITS[0] });
+      lsUploading = false;
+      var j = r.job || {};
+      lsLogSet(job.at, { state: 'remote', rstate: j.state || 'queued' });
+      toast('フリマルに預けました：' + job.name + '（アプリを閉じてもOK）');
+      lsApplyRemote(job.at, j);
     })
     .catch(function(e){
-      if(e.alreadyListed){ lsJobDone(job.at, job.name, null); return; }   // 前回の出品は成功していた
-      if(e.draftId) job.draftId = String(e.draftId);
-      else if(e.stage === 'save') job.draftId = '';
-      lsJobPut(job);
+      lsUploading = false;
       if(e.fromWorker){
-        lsLogSet(job.at, { state: 'failed', msg: '出品できませんでした：' + (e.message || '') });
+        lsLogSet(job.at, { state: 'failed', msg: '出品できませんでした：' + (e.message || ''), jid: '' });
         toast('❌ 出品できませんでした：' + job.name);
-      }else{
-        // 通信が途中で切れた（アプリを閉じた・電波）。フリマル側では出品できている可能性があるので、まず［確認］
-        lsLogSet(job.at, { state: 'interrupted', msg: '通信が途中で切れました。［確認］で出品できているか見てください' });
-        toast('⚠️ 通信が切れました：' + job.name);
-        return 'stop';   // 順番待ちの商品まで巻き添えで送らない（アプリを閉じた瞬間に全部⚠️になるのを防ぐ）
+        return;
       }
+      // 送っている途中で切れた（電波・アプリを閉じた）。同じ仕事IDで送り直せば、届いていても二重にならない
+      lsLogSet(job.at, { state: 'queued', msg: '送信が途中で切れました。電波のある所でアプリを開くと送り直します' });
+      return 'stop';
     });
 }
-function lsRunCheck(rec){
-  return lsAsk('checkListed', { sku: rec.sku || '', itemName: rec.name || '' })
-    .catch(function(){ return null; })
-    .then(function(res){
-      if(res && res.listed){ lsJobDone(rec.at, rec.name, res); return; }
-      var n = (rec.checkN || 0) + 1;
-      if(n >= LS_WAITS.length){
-        lsLogSet(rec.at, { state: 'unverified', msg: '3分待ってもフリマルの在庫に出たことを確認できませんでした。メルカリShopsを見てから［確認］を押してください' });
-        toast('⚠️ 出品を確認できませんでした：' + rec.name);
-      }else{
-        lsLogSet(rec.at, { checkN: n, nextCheck: Date.now() + LS_WAITS[n] });
+/* クラウド側の状態を端末の記録に写す */
+function lsApplyRemote(at, j){
+  var rec = lsLogOne(at);
+  if(!rec || rec.state !== 'remote') return;
+  var st = j.state || '';
+  if(st === 'done'){ lsJobDone(at, rec.name, j); return; }
+  if(st === 'failed'){
+    lsJobGet(at).then(function(job){
+      if(job){
+        if(j.draftId) job.draftId = String(j.draftId);
+        else if(j.stage === 'save') job.draftId = '';
+        lsJobPut(job);
       }
     });
+    lsLogSet(at, { state: 'failed', rstate: '', jid: '', msg: '出品できませんでした：' + (j.error || '') });
+    toast('❌ 出品できませんでした：' + rec.name);
+    return;
+  }
+  if(st === 'unverified'){
+    lsLogSet(at, { state: 'unverified', rstate: '', jid: '', sku: j.sku || rec.sku || '', editUrl: lsShopsUrl(j.editUrl) || rec.editUrl || '', msg: j.error || '出品を確認できませんでした' });
+    toast('⚠️ 出品を確認できませんでした：' + rec.name);
+    return;
+  }
+  lsLogSet(at, { rstate: st, sku: j.sku || rec.sku || '', editUrl: lsShopsUrl(j.editUrl) || rec.editUrl || '' });
+}
+/* 預けた分の結果をまとめて聞く */
+function lsPoll(){
+  var remote = lsLogGet().filter(function(r){ return r.state === 'remote' && r.jid; });
+  if(!remote.length) return Promise.resolve();
+  return lsAsk('status', { op: 'job', ids: remote.map(function(r){ return r.jid; }) })
+    .then(function(res){
+      var jobs = (res && res.jobs) || {};
+      remote.forEach(function(r){
+        if(jobs[r.jid]) lsApplyRemote(r.at, jobs[r.jid]);
+        else if(Date.now() - r.at > 60000) lsLogSet(r.at, { state: 'interrupted', rstate: '', jid: '', checked: false, msg: 'クラウド側に出品の記録が見つかりません。在庫を確かめます' });   // 送り直さない（届いていたら二重出品になる）。在庫で確かめて⚠️で止める
+      });
+    })
+    .catch(function(){});
+}
+/* 以前の版（端末で待っていた v8/v9）の記録：⚠️のまま残っているものを1回だけ在庫で確かめる */
+function lsAutoCheck(rec){
+  return lsAsk('checkListed', { sku: rec.sku || '', itemName: rec.name || '' })
+    .then(function(res){
+      if(res && res.listed){ lsJobDone(rec.at, rec.name, res); return; }
+      lsLogSet(rec.at, { msg: (rec.msg || '') + '／在庫を確かめました：フリマルにはありません。［戻す］で入力に戻して出し直してください', checked: true });
+    })
+    .catch(function(){});
 }
 function lsLoop(){
   var list = lsLogGet().slice().reverse();   // 古い順
-  var due = list.filter(function(r){ return r.state === 'checking' && (r.nextCheck || 0) <= Date.now(); })[0];
-  if(due) return lsRunCheck(due).then(lsLoop);
   var next = list.filter(function(r){ return r.state === 'queued'; })[0];
   if(next) return lsRunJob(next).then(function(stop){
     if(stop !== 'stop') return lsLoop();
-    setTimeout(lsKick, 15000);   // 電波が戻っていれば続きから。アプリが閉じられていればこのタイマーは動かず、次に開いた時に続きから
+    setTimeout(lsKick, 15000);   // 電波が戻っていれば送り直す。アプリが閉じられていればこのタイマーは動かず、次に開いた時に
   });
-  if(list.some(function(r){ return r.state === 'checking'; })) return lsSleep(3000).then(lsLoop);
+  var legacy = list.filter(function(r){ return LS_PROBLEM[r.state] && r.state !== 'failed' && !r.checked; })[0];
+  if(legacy) return lsAutoCheck(legacy).then(lsLoop);
+  if(list.some(function(r){ return r.state === 'remote'; })){
+    if(document.hidden) return Promise.resolve();   // 裏にいる間は聞かない（クラウドが進めている。前に戻った時に聞く）
+    return lsSleep(LS_POLL_MS).then(lsPoll).then(lsLoop);
+  }
   return Promise.resolve();
 }
 function lsKick(){
   if(lsRunning) return;
   lsRunning = true;
-  var run = function(){ lsWakeOn(); return lsLoop().catch(function(){}); };
-  // 同じ端末で2画面（単独アプリと値下げスターの出品タブ）が同時に開いていても、送るのは1画面だけ（二重出品の防止）。
-  // ロックを取れなかった側は何もしない。取った側が順番待ちを全部さばく（記録は localStorage・控えは IndexedDB で共有）
+  var run = function(){ return lsPoll().then(lsLoop).catch(function(){}); };
+  // 同じ端末で2画面（単独アプリと値下げスターの出品タブ）が同時に開いていても、送る・聞くのは1画面だけ。
+  // ロックを取れなかった側は何もしない（記録は localStorage・控えは IndexedDB で共有）
   var p = (navigator.locks && navigator.locks.request)
     ? navigator.locks.request('shuppin-queue', { ifAvailable: true }, function(lock){ return lock ? run() : null; })
     : run();
   Promise.resolve(p).catch(function(){}).then(function(){
     lsRunning = false;
-    lsWakeOff();
     lsLogRender();
-    if(lsWantReload) location.reload();
+    if(lsWantReload && !lsUploading) location.reload();
   });
 }
-/* 起動時：前回の控えを読み戻す。送信の途中で閉じられたものは「確認が必要」に、順番待ちだったものは続きから出す */
+/* 起動時：前回の控えを読み戻す。送信の途中で閉じられたものは同じ仕事IDで送り直す（クラウドが重複を弾く）。
+ * 以前の版で「出品中」「反映待ち」のまま閉じられたもの（jid 無し）は、在庫を確かめてから⚠️にする */
 function lsJobsBoot(){
   return lsDbRun('readonly', function(st){ return st.getAll(); }).then(function(all){
     (all || []).forEach(function(j){ lsJobs[j.at] = j; });
     var list = lsLogGet(), alive = {};
     list.forEach(function(r){
       alive[r.at] = 1;
-      if(r.state === 'sending'){ r.state = 'interrupted'; r.msg = '出品の途中でアプリが閉じられました。［確認］で出品できているか見てください'; }
+      if(r.state === 'sending'){
+        if(r.jid){ r.state = 'queued'; r.msg = ''; }
+        else { r.state = 'interrupted'; r.msg = '以前の版で、出品の途中でアプリが閉じられました'; }
+      }
+      else if(r.state === 'checking' && !r.jid){ r.state = 'interrupted'; r.msg = '以前の版で、反映待ちの途中でアプリが閉じられました'; }
       else if(r.state === 'queued' && !lsJobs[r.at]){ r.state = 'failed'; r.msg = '控えが残っていません。入力し直してください'; }
-      else if(r.state === 'checking'){ r.nextCheck = 0; }
     });
     Object.keys(lsJobs).forEach(function(at){ if(!alive[at]) lsJobDrop(Number(at)); });   // 記録から流れた控えは片付ける
     lsLogPut(list);
-    if(list.some(function(r){ return LS_ACTIVE[r.state]; })) lsKick();
+    if(list.some(function(r){ return LS_ACTIVE[r.state] || (LS_PROBLEM[r.state] && r.state !== 'failed' && !r.checked); })) lsKick();
   });
 }
-/* 別の画面で記録が動いたら表示を合わせる。順番待ちが増えていて、誰も送っていなければこちらで送る */
+/* 別の画面で記録が動いたら表示を合わせる。送信待ちが増えていて、誰も送っていなければこちらで送る */
 window.addEventListener('storage', function(e){
   if(e.key !== LS_LOG) return;
   lsLogRender();
   if(lsLogGet().some(function(r){ return LS_ACTIVE[r.state]; })) lsKick();
 });
 window.addEventListener('beforeunload', function(e){
-  if(!lsRunning) return;
+  if(!lsUploading) return;   // 写真を送っている最中だけ止める。預けたあとは閉じてよい
   e.preventDefault(); e.returnValue = '';
 });
 
@@ -945,7 +987,7 @@ $('lsPublish').addEventListener('click', function(){
       '\n赤字ストッパー：' + (akaji !== '' ? '¥' + akaji.toLocaleString() : 'なし') +
       '\n自動値下げ：' + (pr.on ? lsPrSummary() : 'なし') +
       (retry ? '\n\n※前回保存した下書き（ID ' + lsPendingDraftId + '）を出品します' : '') +
-      '\n\nメルカリShopsに公開されます。よろしいですか？\n（出品は裏で進みます。すぐ次の商品を入力できます）')) return;
+      '\n\nメルカリShopsに公開されます。よろしいですか？\n（出品はクラウドが進めます。送信が済めばアプリを閉じてもOK）')) return;
 
   var btn = this;
   btn.disabled = true;
@@ -966,7 +1008,7 @@ $('lsPublish').addEventListener('click', function(){
     lsDraft = lsBlank(lsDraft);
     lsSave(); lsRenderAll();
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    toast('受け付けました。裏で出品します。次の商品をどうぞ');
+    toast('受け付けました。写真を送っています…　次の商品をどうぞ');
     lsKick();
   }).finally(function(){ btn.disabled = false; });
 });
@@ -1049,7 +1091,7 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if(reloaded) return;
     reloaded = true;
-    if(lsRunning){ lsWantReload = true; return; }   // 裏で出品している間は読み直さない（送信が切れる）
+    if(lsUploading){ lsWantReload = true; return; }   // 写真を送っている最中だけ読み直さない（送信が切れる）
     location.reload();
   });
   window.addEventListener('load', function(){

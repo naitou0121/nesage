@@ -388,7 +388,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v29</div>
+  <div class="ver">v30</div>
 </header>
 
 <div id="ptPane">
@@ -1466,6 +1466,23 @@ function openFmSheet(){
  * 押したらシートを閉じて、送信→フリマルの登録履歴で完了確認までを裏で回す。その間も一覧の編集・タブ切替はそのままできる。
  * 状態は localStorage（nesage-fm-job）に残すので、アプリを開き直しても確認の続きから見る。
  * 同時に走らせるのは1件だけ（フリマルの一括編集は予約単位で処理されるため、前の分が終わってから次を送る）。 */
+/* v30：反映はクラウド（Worker の列）が進める。端末は「預ける」通信を1回するだけで、あとは結果を聞きに行く。
+ * 預けたあとはアプリを閉じても・他のアプリを開いても続く。同じ仕事IDはクラウドが1回しか受けないので、送り直しても二重反映にならない */
+function jobEnqueue(site, kind, id, body){
+  var pass = localStorage.getItem(LS_PASS);
+  return fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pass: pass, op: 'job', site: site, action: 'enqueue', id: id, kind: kind, body: body }) })
+    .then(function(r){ return r.json(); })
+    .then(function(res){ if(res.error){ var e = new Error(res.error); e.fromWorker = true; throw e; } return res.job || {}; });
+}
+function jobStatus(site, id){
+  var pass = localStorage.getItem(LS_PASS);
+  return fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pass: pass, op: 'job', site: site, action: 'status', ids: [id] }) })
+    .then(function(r){ return r.json(); })
+    .then(function(res){ if(res.error) throw new Error(res.error); return (res.jobs || {})[id] || null; });
+}
+function jobUploading(){ return (!!fmJob && fmJob.state === 'sending') || (!!ptJob && ptJob.state === 'sending'); }
 var LS_FM_JOB = 'nesage-fm-job';
 var fmJob = (function(){
   try{ return JSON.parse(localStorage.getItem(LS_FM_JOB) || 'null'); }catch(e){ return null; }
@@ -1479,7 +1496,7 @@ function fmSaveJob(){
   }catch(e){}
   fmRenderJobBar();
 }
-function fmJobBusy(){ return !!fmJob && (fmJob.state === 'sending' || fmJob.state === 'watching'); }
+function fmJobBusy(){ return !!fmJob && (fmJob.state === 'sending' || fmJob.state === 'remote' || fmJob.state === 'watching'); }
 function fmWake(on){
   try{
     if(on && !fmWakeLock && navigator.wakeLock){
@@ -1491,8 +1508,7 @@ function fmWake(on){
 function fmJobEnd(){
   clearInterval(fmWatchTimer);
   fmWatchTimer = null;
-  if(!ptJobBusy()) fmWake(false);
-  if(fmReloadWanted && !ptJobBusy()) setTimeout(function(){ location.reload(); }, 1500);   // 反映中に届いた新しい版は終わってから読み直す
+  if(fmReloadWanted && !jobUploading()) setTimeout(function(){ location.reload(); }, 1500);   // 送信中に届いた新しい版は送り終わってから読み直す
 }
 
 function fmRenderJobBar(){
@@ -1501,9 +1517,9 @@ function fmRenderJobBar(){
   var j = fmJob, cls = '', text = '', acts = '';
   var sec = Math.round((Date.now() - (j.acceptedAt || j.startedAt)) / 1000);
   if(j.state === 'sending'){
-    text = '⏳ フリマルに送信中：' + j.n + '件（裏で進めています・アプリは開いたままで）';
-  }else if(j.state === 'watching'){
-    text = '⏳ フリマルで処理中：' + (j.sentCount != null ? j.sentCount : j.n) + '件（' + sec + '秒）';
+    text = '📤 フリマルに送信中：' + j.n + '件（送り終わるまで開いたまま）' + (j.msg ? '　' + j.msg : '');
+  }else if(j.state === 'remote'){
+    text = (j.rstate === 'watching' ? '⏳ フリマルで処理中：' : '⏳ フリマルに反映中：') + j.n + '件（' + sec + '秒・閉じてもOK）';
   }else if(j.state === 'ok'){
     cls = ' ok';
     text = '✅ フリマルに反映しました：' + j.done + '件（失敗0）';
@@ -1525,47 +1541,101 @@ function fmDoApply(){
   var pass = localStorage.getItem(LS_PASS);
   if(!pass){ toast('先にプライスタータブで「☁️ 更新」して合言葉を入れてください'); return; }
   if(fmJobBusy()){ toast('前の反映をフリマルで処理中です。終わったら押せます（変更はそのまま残っています）'); return; }
-  if(!confirm('フリマルに ' + n + ' 件を反映します。よろしいですか？\n\n裏で進めるので、押したあとも作業を続けられます。')) return;
+  if(!confirm('フリマルに ' + n + ' 件を反映します。よろしいですか？\n\n裏で進めるので、押したあとも作業を続けられます。送り終わればアプリを閉じてもOKです。')) return;
   var sent = fmChanges;
   // 送った分は保留から外す（裏で反映中に、別の商品の値段を続けて直せるように）
   fmChanges = {};
   fmSaveChanges();
-  fmJob = { state: 'sending', n: n, changes: sent, startedAt: Date.now() };
+  fmJob = { state: 'sending', n: n, changes: sent, startedAt: Date.now(), id: 'fm' + Date.now() };
   fmSaveJob();
   closeSheet();
   fmRefresh();
-  toast('裏でフリマルに反映しています。このまま作業を続けてOKです');
-  fmWake(true);
-  fetch(APPLY_URL, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pass: pass, site: 'furimaru', changes: sent }),
-  })
-    .then(function(r){ return r.json(); })
-    .then(function(res){
-      if(res.error) throw new Error(res.error);
-      try{
-        var out = FM.buildExport(fmBytes, fmParsed, sent, false);
-        fmBytes = out.bytes;
-        fmParsed = FM.parseFile(fmBytes);
-        idbPut('fm-file', { bytes: fmBytes, at: fmAt });
-      }catch(e){}
-      fmRefresh();
-      // ここではまだ「受け付けた」だけ。フリマルの登録履歴を見て完了を確かめる
-      fmJob.state = 'watching';
-      fmJob.reserveId = res.reserveId || null;
-      fmJob.sentCount = res.applied != null ? res.applied : n;
-      fmJob.acceptedAt = Date.now();
-      delete fmJob.changes;   // 受け付けた後は戻さない（手元の値段はもう新しい方になっている）
+  toast('フリマルに預けています。送り終わればアプリを閉じてもOKです');
+  fmSend();
+}
+/* 預ける（同じ仕事IDで送り直しても、クラウド側が重複を弾く） */
+function fmSend(){
+  if(!fmJob || fmJob.state !== 'sending') return;
+  var id = fmJob.id;
+  jobEnqueue('furimaru', 'fmApply', id, { changes: fmJob.changes })
+    .then(function(j){
+      if(!fmJob || fmJob.id !== id || fmJob.state !== 'sending') return;
+      fmJob.state = 'remote'; fmJob.acceptedAt = Date.now(); fmJob.msg = '';
       fmSaveJob();
-      fmWatchApply();
+      fmApplyRemote(j);
+      fmWatch();
+      if(fmReloadWanted && !jobUploading()) setTimeout(function(){ location.reload(); }, 1500);
     })
     .catch(function(e){
-      fmJob.state = 'ng';
-      fmJob.msg = '反映できませんでした：' + (e.message || '通信に失敗しました') + '（［戻す］で変更を保留に戻せます）';
-      fmJob.canRestore = true;
+      if(!fmJob || fmJob.id !== id || fmJob.state !== 'sending') return;
+      if(e.fromWorker){
+        fmJob.state = 'ng';
+        fmJob.msg = '反映できませんでした：' + (e.message || '') + '（［戻す］で変更を保留に戻せます）';
+        fmJob.canRestore = true;
+        fmSaveJob();
+        fmJobEnd();
+        return;
+      }
+      // 送っている途中で切れた（電波・アプリを閉じた）。同じIDで送り直す
+      fmJob.msg = '送信が切れました。電波が戻れば送り直します';
       fmSaveJob();
-      fmJobEnd();
+      setTimeout(fmSend, 15000);
     });
+}
+/* クラウド側の状態を手元に写す。受け付けられた時点で手元の値段を新しい方にする（クラウドは1日2回更新なので取り直さない） */
+function fmApplyRemote(j){
+  if(!fmJob || fmJob.state !== 'remote' || !j) return;
+  fmJob.rstate = j.state || '';
+  if((j.state === 'watching' || j.state === 'done') && !fmJob.merged && fmJob.changes){
+    try{
+      var out = FM.buildExport(fmBytes, fmParsed, fmJob.changes, false);
+      fmBytes = out.bytes;
+      fmParsed = FM.parseFile(fmBytes);
+      idbPut('fm-file', { bytes: fmBytes, at: fmAt });
+    }catch(e){}
+    fmJob.merged = true;
+    fmRefresh();
+  }
+  if(j.state === 'done'){
+    fmJob.state = 'ok';
+    fmJob.done = (j.result && j.result.done != null) ? j.result.done : (j.applied != null ? j.applied : fmJob.n);
+    fmSaveJob(); fmJobEnd(); return;
+  }
+  if(j.state === 'failed'){
+    fmJob.state = 'ng';
+    fmJob.canRestore = !!j.canRestore && !fmJob.merged;
+    fmJob.msg = (j.error || 'フリマルへの反映を確認できませんでした') + (fmJob.canRestore ? '（［戻す］で変更を保留に戻せます）' : '');
+    fmSaveJob(); fmJobEnd(); return;
+  }
+  fmSaveJob();
+}
+/* 結果を聞きに行く（前にいる時だけ。裏ではクラウドが進めている） */
+function fmWatch(){
+  clearInterval(fmWatchTimer);
+  fmWatchTimer = null;
+  if(!fmJob || fmJob.state !== 'remote') return;
+  var busy = false;
+  var tick = function(){
+    if(!fmJob || fmJob.state !== 'remote' || busy || document.hidden) return;
+    fmRenderJobBar();
+    busy = true;
+    jobStatus('furimaru', fmJob.id)
+      .then(function(j){
+        busy = false;
+        if(!fmJob || fmJob.state !== 'remote') return;
+        if(!j){
+          if(Date.now() - (fmJob.acceptedAt || 0) < 60000) return;   // 直後は読めないことがある
+          fmJob.state = 'ng'; fmJob.canRestore = false;
+          fmJob.msg = 'クラウド側に反映の記録が見つかりませんでした。「☁️ 更新」で値段を確かめてください';
+          fmSaveJob(); fmJobEnd(); return;
+        }
+        fmApplyRemote(j);
+      })
+      .catch(function(){ busy = false; });
+  };
+  fmWatchTimer = setInterval(tick, 6000);
+  setTimeout(tick, 1500);
+  fmWatch.tick = tick;
 }
 
 /* 失敗した分を保留の変更に戻す。裏で反映中に同じ商品をもう一度直していたら、そっち（新しい方）を残す */
@@ -1584,72 +1654,22 @@ function fmRestoreJob(){
 
 /* フリマルは非同期処理。登録履歴（ReserveId）を見に行って、
  * 「完了◯件・失敗◯件」を確かめてから✅を出す。確かめられないうちは✅を出さない。 */
-function fmWatchApply(){
-  clearInterval(fmWatchTimer);
-  if(!fmJob || fmJob.state !== 'watching') return;
-  var pass = localStorage.getItem(LS_PASS);
-  var finish = function(state, msg, extra){
-    fmJob.state = state;
-    fmJob.msg = msg;
-    if(extra) Object.keys(extra).forEach(function(k){ fmJob[k] = extra[k]; });
-    fmSaveJob();
-    fmJobEnd();
-  };
-  if(!fmJob.reserveId){
-    finish('ng', fmJob.sentCount + '件を受け付けましたが、結果を確認できませんでした。しばらくしてから「☁️ 更新」で確かめてください');
-    return;
-  }
-  fmWake(true);
-  var busy = false;
-  var tick = function(){
-    if(!fmJob || fmJob.state !== 'watching' || busy) return;
-    fmRenderJobBar();
-    if(Date.now() - fmJob.acceptedAt > FM_WATCH_LIMIT){
-      finish('ng', 'フリマルの処理が6分たっても終わりませんでした。フリマルの「CSVで一括編集 → 4.登録履歴」を直接見てください');
-      return;
-    }
-    busy = true;
-    fetch(APPLY_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pass: pass, site: 'furimaru', action: 'applyStatus', reserveId: fmJob.reserveId }),
-    })
-      .then(function(r){ return r.json(); })
-      .then(function(st){
-        busy = false;
-        if(st.error) throw new Error(st.error);
-        if(!fmJob || fmJob.state !== 'watching' || !st.found) return;
-        if(st.status === '完了'){
-          var failed = st.failed || 0;
-          if(failed > 0){
-            finish('ng', 'フリマルで' + failed + '件が失敗しました（完了' + (st.done != null ? st.done : '-') + '件）。「CSVで一括編集 → 4.登録履歴」のエラー詳細を見てください');
-          }else{
-            finish('ok', '', { done: st.done != null ? st.done : fmJob.sentCount, endAt: st.endAt || '' });
-          }
-          return;
-        }
-        if(st.status === 'エラー'){
-          finish('ng', 'フリマル側でエラーになりました。「CSVで一括編集 → 4.登録履歴」のエラー詳細を見てください');
-        }
-      })
-      .catch(function(){ busy = false; });
-  };
-  fmWatchTimer = setInterval(tick, 12000);
-  setTimeout(tick, Math.max(0, 8000 - (Date.now() - fmJob.acceptedAt)));
-  fmWatchApply.tick = tick;
-}
+
 
 /* 開き直した時：送信の途中で閉じていたら⚠️（受け付けられたか分からない）、確認中なら続きから見る */
 function fmResumeJob(){
   if(!fmJob){ fmRenderJobBar(); return; }
-  if(fmJob.state === 'sending'){
+  if(fmJob.state === 'watching' || (fmJob.state === 'sending' && !fmJob.id)){
+    // v29以前の途中（端末で待っていた頃）。届いたかは分からない
     fmJob.state = 'ng';
-    fmJob.msg = '送信の途中でアプリが閉じました。フリマルに届いたか分からないので、「☁️ 更新」で値段を確かめてから必要なら［戻す］で出し直してください';
-    fmJob.canRestore = true;
+    fmJob.msg = '以前の版で、反映の途中でアプリが閉じました。フリマルに届いたか分からないので、「☁️ 更新」で値段を確かめてから必要なら［戻す］で出し直してください';
+    fmJob.canRestore = !!fmJob.changes;
     fmSaveJob();
     return;
   }
   fmRenderJobBar();
-  if(fmJob.state === 'watching') fmWatchApply();
+  if(fmJob.state === 'sending') fmSend();      // 送信の途中で閉じていた：同じIDで送り直す（クラウドが重複を弾く）
+  if(fmJob.state === 'remote') fmWatch();
 }
 $('fmJobBar').addEventListener('click', function(e){
   var b = e.target.closest('button[data-fmjob]');
@@ -1660,13 +1680,13 @@ $('fmJobBar').addEventListener('click', function(e){
 });
 // 前面に戻った時はすぐ確認する（裏にいる間はiOSがタイマーを止めるため）
 document.addEventListener('visibilitychange', function(){
-  if(!document.hidden && fmJob && fmJob.state === 'watching' && fmWatchApply.tick) fmWatchApply.tick();
+  if(!document.hidden && fmJob && fmJob.state === 'remote' && fmWatch.tick) fmWatch.tick();
 });
-setInterval(function(){ if(fmJob && fmJob.state === 'watching') fmRenderJobBar(); }, 1000);
+setInterval(function(){ if(fmJob && fmJob.state === 'remote') fmRenderJobBar(); }, 1000);
 
 /* プライスターへの反映も裏で進める（v29〜）。
  * 押したらシートを閉じて、ヘッダー下の帯で ⏳送信中→✅/⚠️。その間も一覧の編集・タブ切替はできる。
- * プライスターは1回の通信で結果まで返る（10秒ほど）ので、フリマルのような登録履歴の確認はいらない。 */
+ * v30：クラウド（Worker の列）に預けて進める。送り終わればアプリを閉じてもOK。結果は開いた時に聞きに行く。 */
 var LS_PT_JOB = 'nesage-pt-job';
 var ptJob = (function(){
   try{ return JSON.parse(localStorage.getItem(LS_PT_JOB) || 'null'); }catch(e){ return null; }
@@ -1678,17 +1698,21 @@ function ptSaveJob(){
   }catch(e){}
   ptRenderJobBar();
 }
-function ptJobBusy(){ return !!ptJob && ptJob.state === 'sending'; }
+function ptJobBusy(){ return !!ptJob && (ptJob.state === 'sending' || ptJob.state === 'remote'); }
+var ptWatchTimer = null;
 function ptJobEnd(){
-  if(!fmJobBusy()) fmWake(false);
-  if(fmReloadWanted && !fmJobBusy()) setTimeout(function(){ location.reload(); }, 1500);
+  clearInterval(ptWatchTimer);
+  ptWatchTimer = null;
+  if(fmReloadWanted && !jobUploading()) setTimeout(function(){ location.reload(); }, 1500);
 }
 function ptRenderJobBar(){
   var bar = $('ptJobBar');
   if(!ptJob){ bar.hidden = true; bar.innerHTML = ''; return; }
   var j = ptJob, cls = '', text = '', acts = '';
   if(j.state === 'sending'){
-    text = '⏳ プライスターに反映中：' + j.n + '件（' + Math.round((Date.now() - j.startedAt) / 1000) + '秒・アプリは開いたままで）';
+    text = '📤 プライスターに送信中：' + j.n + '件（送り終わるまで開いたまま）' + (j.msg ? '　' + j.msg : '');
+  }else if(j.state === 'remote'){
+    text = '⏳ プライスターに反映中：' + j.n + '件（' + Math.round((Date.now() - j.startedAt) / 1000) + '秒・閉じてもOK）';
   }else if(j.state === 'ok'){
     cls = ' ok';
     text = '✅ プライスターに反映しました：' + j.applied + '件' + (j.note ? '（' + j.note + '）' : '');
@@ -1709,7 +1733,7 @@ function ptDoApply(){
   var pass = localStorage.getItem('nesage-pass');
   if(!pass){ toast('先に「☁️ 更新」で合言葉を入れてください'); return; }
   if(ptJobBusy()){ toast('前の反映がまだ終わっていません。終わったら押せます（変更はそのまま残っています）'); return; }
-  if(!confirm('プライスターに ' + n + ' 件を反映します。よろしいですか？\n\n裏で進めるので、押したあとも作業を続けられます。')) return;
+  if(!confirm('プライスターに ' + n + ' 件を反映します。よろしいですか？\n\n裏で進めるので、押したあとも作業を続けられます。送り終わればアプリを閉じてもOKです。')) return;
   var sent = changes;
   var kinds = { price: false, stopper: false };
   Object.keys(sent).forEach(function(sku){
@@ -1720,48 +1744,95 @@ function ptDoApply(){
   // 送った分は保留から外す（裏で反映中に、別の商品の値段を続けて直せるように）
   changes = {};
   saveChanges();
-  ptJob = { state: 'sending', n: n, changes: sent, startedAt: Date.now() };
+  ptJob = { state: 'sending', n: n, changes: sent, kinds: kinds, startedAt: Date.now(), id: 'pt' + Date.now() };
   ptSaveJob();
   closeSheet();
   refresh();
-  toast('裏でプライスターに反映しています。このまま作業を続けてOKです');
-  fmWake(true);
-  fetch(APPLY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pass: pass, changes: sent }),
-  })
-    .then(function(r){ return r.json(); })
-    .then(function(res){
-      if(res.error) throw new Error(res.error);
-      // 反映した内容を手元のデータにも反映（クラウドは1日2回更新なので取り直さない）
-      try{
-        var out = CORE.buildExport(fileBytes, parsed, sent);
-        fileBytes = out.bytes;
-        parsed = CORE.parseFile(fileBytes);
-        fileSource = '反映済み ' + new Date().toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
-        idbPut('file', { bytes: fileBytes, name: fileName, at: importedAt, source: fileSource });
-      }catch(e){}
-      refresh();
-      var notes = [];
-      if(res.errorCount) notes.push('エラー' + res.errorCount + '件' + (res.errorRows && res.errorRows.length ? '：' + (res.errorRows[0].reason || '') : ''));
-      if(res.missing && res.missing.length) notes.push('在庫に無かった商品' + res.missing.length + '件');
-      if(res.conflicts && res.conflicts.length) notes.push('設定の矛盾で送らなかった商品' + res.conflicts.length + '件');
-      if(kinds.stopper && !kinds.price) notes.push('ストッパーだけ変えた商品は次の自動改定で値段が動きます');
-      ptJob = { state: 'ok', n: n, applied: res.applied != null ? res.applied : 0, note: notes.join('・'), startedAt: ptJob.startedAt };
+  toast('プライスターに預けています。送り終わればアプリを閉じてもOKです');
+  ptSend();
+}
+function ptSend(){
+  if(!ptJob || ptJob.state !== 'sending') return;
+  var id = ptJob.id;
+  jobEnqueue('pricetar', 'ptApply', id, { changes: ptJob.changes })
+    .then(function(j){
+      if(!ptJob || ptJob.id !== id || ptJob.state !== 'sending') return;
+      ptJob.state = 'remote'; ptJob.acceptedAt = Date.now(); ptJob.msg = '';
       ptSaveJob();
-      ptJobEnd();
+      ptApplyRemote(j);
+      ptWatch();
+      if(fmReloadWanted && !jobUploading()) setTimeout(function(){ location.reload(); }, 1500);
     })
     .catch(function(e){
-      ptJob.state = 'ng';
-      // 通信が途中で切れた時は、プライスターに届いたかどうか分からない
-      ptJob.msg = (e instanceof TypeError)
-        ? '通信が途中で切れました。プライスターに届いたか分からないので、「☁️ 更新」で値段を確かめてから必要なら［戻す］で出し直してください'
-        : '反映できませんでした：' + (e.message || '通信に失敗しました') + '（［戻す］で変更を保留に戻せます）';
-      ptJob.canRestore = true;
+      if(!ptJob || ptJob.id !== id || ptJob.state !== 'sending') return;
+      if(e.fromWorker){
+        ptJob.state = 'ng';
+        ptJob.msg = '反映できませんでした：' + (e.message || '') + '（［戻す］で変更を保留に戻せます）';
+        ptJob.canRestore = true;
+        ptSaveJob();
+        ptJobEnd();
+        return;
+      }
+      ptJob.msg = '送信が切れました。電波が戻れば送り直します';
       ptSaveJob();
-      ptJobEnd();
+      setTimeout(ptSend, 15000);
     });
+}
+function ptApplyRemote(j){
+  if(!ptJob || ptJob.state !== 'remote' || !j) return;
+  ptJob.rstate = j.state || '';
+  if(j.state === 'done'){
+    var res = j.result || {};
+    // 反映した内容を手元のデータにも反映（クラウドは1日2回更新なので取り直さない）
+    try{
+      var out = CORE.buildExport(fileBytes, parsed, ptJob.changes || {});
+      fileBytes = out.bytes;
+      parsed = CORE.parseFile(fileBytes);
+      fileSource = '反映済み ' + new Date().toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+      idbPut('file', { bytes: fileBytes, name: fileName, at: importedAt, source: fileSource });
+    }catch(e){}
+    refresh();
+    var notes = [], kinds = ptJob.kinds || {};
+    if(res.errorCount) notes.push('エラー' + res.errorCount + '件' + (res.errorRows && res.errorRows.length ? '：' + (res.errorRows[0].reason || '') : ''));
+    if(res.missing && res.missing.length) notes.push('在庫に無かった商品' + res.missing.length + '件');
+    if(res.conflicts && res.conflicts.length) notes.push('設定の矛盾で送らなかった商品' + res.conflicts.length + '件');
+    if(kinds.stopper && !kinds.price) notes.push('ストッパーだけ変えた商品は次の自動改定で値段が動きます');
+    ptJob = { state: 'ok', n: ptJob.n, applied: res.applied != null ? res.applied : 0, note: notes.join('・'), startedAt: ptJob.startedAt };
+    ptSaveJob(); ptJobEnd(); return;
+  }
+  if(j.state === 'failed'){
+    ptJob.state = 'ng';
+    ptJob.canRestore = !!j.canRestore;
+    ptJob.msg = (j.error || 'プライスターへの反映を確認できませんでした') + (ptJob.canRestore ? '（［戻す］で変更を保留に戻せます）' : '');
+    ptSaveJob(); ptJobEnd(); return;
+  }
+  ptSaveJob();
+}
+function ptWatch(){
+  clearInterval(ptWatchTimer);
+  ptWatchTimer = null;
+  if(!ptJob || ptJob.state !== 'remote') return;
+  var busy = false;
+  var tick = function(){
+    if(!ptJob || ptJob.state !== 'remote' || busy || document.hidden) return;
+    busy = true;
+    jobStatus('pricetar', ptJob.id)
+      .then(function(j){
+        busy = false;
+        if(!ptJob || ptJob.state !== 'remote') return;
+        if(!j){
+          if(Date.now() - (ptJob.acceptedAt || 0) < 60000) return;
+          ptJob.state = 'ng'; ptJob.canRestore = false;
+          ptJob.msg = 'クラウド側に反映の記録が見つかりませんでした。「☁️ 更新」で値段を確かめてください';
+          ptSaveJob(); ptJobEnd(); return;
+        }
+        ptApplyRemote(j);
+      })
+      .catch(function(){ busy = false; });
+  };
+  ptWatchTimer = setInterval(tick, 5000);
+  setTimeout(tick, 1500);
+  ptWatch.tick = tick;
 }
 /* 失敗した分を保留の変更に戻す。裏で反映中に同じ商品をもう一度直していたら、そっち（新しい方）を残す */
 function ptRestoreJob(){
@@ -1778,13 +1849,19 @@ function ptRestoreJob(){
 }
 /* 開き直した時：送信の途中で閉じていたら⚠️（届いたか分からない） */
 function ptResumeJob(){
-  if(ptJob && ptJob.state === 'sending'){
+  if(ptJob && ptJob.state === 'sending' && !ptJob.id){
+    // v29の途中（端末で待っていた頃）。届いたかは分からない
     ptJob.state = 'ng';
-    ptJob.msg = '反映の途中でアプリが閉じました。プライスターに届いたか分からないので、「☁️ 更新」で値段を確かめてから必要なら［戻す］で出し直してください';
+    ptJob.msg = '以前の版で、反映の途中でアプリが閉じました。プライスターに届いたか分からないので、「☁️ 更新」で値段を確かめてから必要なら［戻す］で出し直してください';
     ptJob.canRestore = true;
   }
   ptSaveJob();
+  if(ptJob && ptJob.state === 'sending') ptSend();   // 送信の途中で閉じていた：同じIDで送り直す
+  if(ptJob && ptJob.state === 'remote') ptWatch();
 }
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden && ptJob && ptJob.state === 'remote' && ptWatch.tick) ptWatch.tick();
+});
 $('ptJobBar').addEventListener('click', function(e){
   var b = e.target.closest('button[data-ptjob]');
   if(!b) return;
@@ -2207,7 +2284,7 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if(reloaded) return;
     reloaded = true;
-    if(fmJobBusy() || ptJobBusy()){ fmReloadWanted = true; return; }   // 反映中は読み直さない（終わってから）
+    if(jobUploading()){ fmReloadWanted = true; return; }   // 送信中だけ読み直さない（預けたあとはクラウドが進める）
     location.reload();
   });
   window.addEventListener('load', function(){
