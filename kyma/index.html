@@ -89,7 +89,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v1';
+const VER = 'v2';
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
 const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
@@ -145,7 +145,8 @@ if (D) render();
 
 /* ---------- 調べる・探す（手元サーバーがある時だけ出す。置いただけのページでは出ない） ---------- */
 const $ = id => document.getElementById(id);
-let PASS = ''; try { PASS = localStorage.getItem('kyma-pass') || '' } catch(e) {}
+// 値下げスターと同じ置き場（同じサイトの中）なので、そちらで入れてあれば合言葉を打たずに開く
+let PASS = ''; try { PASS = localStorage.getItem('kyma-pass') || localStorage.getItem('nesage-pass') || '' } catch(e) {}
 const post = (u, body) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
 function api(p, body){
   if (!CLOUD) return body ? post(p, body) : fetch(p).then(r => r.json());
