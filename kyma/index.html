@@ -93,7 +93,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v5';
+const VER = 'v6';
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
 const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
@@ -264,6 +264,8 @@ if (!CLOUD) {
 $('modes').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
 $('frecipe').addEventListener('change', drawKnobs);
 function useSeller(id){
+  const cur = RECIPES.find(x => x.id === $('frecipe').value);
+  if (cur && !cur.seller && RECIPES.some(x => x.id === 'seller_evap')) { $('frecipe').value = 'seller_evap'; drawKnobs(); }
   if (!SELLERS.concat(mySellers()).some(s => s.id === id)) {
     const l = mySellers(); l.push({ id: id, name: 'この端末で足した ' + id });
     try { localStorage.setItem('kyma-sellers', JSON.stringify(l)) } catch(e) {}
