@@ -80,6 +80,10 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <section id="finderV" hidden>
   <p class="hint">やり方を選んで、数字を動かして試します。1回につき 11＋判定する件数 のトークン。</p>
   <select id="frecipe"></select>
+  <div id="fsellerBox">
+    <select id="fseller"></select>
+    <div class="tools"><input id="fsurl" placeholder="AmazonのストアのURL か セラーID を貼る" autocomplete="off"><button class="btn" id="fsadd">足す</button></div>
+  </div>
   <div id="fknobs"></div>
   <div class="tools"><label>判定する件数 <input id="fn" inputmode="numeric" value="5" style="width:56px;flex:none"></label><button class="btn" id="fgo">この条件で探す</button></div>
   <div class="msg" id="fmsg"></div><ul id="fout"></ul>
@@ -89,7 +93,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v2';
+const VER = 'v3';
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
 const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
@@ -153,7 +157,7 @@ function api(p, body){
   const op = p.split('/').pop();
   if (op === 'finder') {
     const r = RECIPES.find(x => x.id === body.recipe) || {};
-    return post(CLOUD.api, { pass: PASS, op: 'finder', kind: r.judge, n: body.n, selection: Object.assign({}, r.selection, body.overrides) });
+    return post(CLOUD.api, { pass: PASS, op: 'finder', kind: r.judge, n: body.n, seller: body.seller, live: body.live, selection: Object.assign({}, r.selection, body.overrides) });
   }
   return post(CLOUD.api, Object.assign({ pass: PASS, op: op }, body || {}));
 }
@@ -180,7 +184,17 @@ function knobLabel(k){
   if (k === 'publicationDate_gte') return ['発売日がこれ以降（年月日8桁）', 1];
   return null;
 }
-let RECIPES = [], lastRun = null;
+let RECIPES = [], SELLERS = [], lastRun = null;
+const mySellers = () => { try { return JSON.parse(localStorage.getItem('kyma-sellers') || '[]') } catch(e) { return [] } };
+function drawSellers(keep){
+  const all = SELLERS.concat(mySellers());
+  $('fseller').innerHTML = '<option value="">セラーを指定しない（Amazon全体から）</option>' + all.map(s => `<option value="${esc(s.id)}">${esc(s.name)}${s.mine ? '（自分の店）' : ''}</option>`).join('');
+  if (keep) $('fseller').value = keep;
+}
+function sellerIdFrom(t){
+  const m = String(t).match(/[?&](?:me|seller|merchant)=(A[0-9A-Z]{9,15})/) || String(t).trim().match(/^(A[0-9A-Z]{9,15})$/);
+  return m ? m[1] : null;
+}
 function drawKnobs(){
   const r = RECIPES.find(x => x.id === $('frecipe').value); if (!r) return;
   $('fknobs').innerHTML = Object.entries(r.selection).map(([k, v]) => {
@@ -199,7 +213,7 @@ function gotRecipes(rs){
   drawKnobs();
 }
 if (!CLOUD) {
-  fetch('/api/token').then(r => r.ok ? r.json() : Promise.reject()).then(t => { $('modes').hidden = false; showTok(t.left); return api('/api/recipes'); }).then(gotRecipes).catch(() => {});
+  fetch('/api/token').then(r => r.ok ? r.json() : Promise.reject()).then(t => { $('modes').hidden = false; showTok(t.left); return api('/api/recipes'); }).then(gotRecipes).then(() => api('/api/sellers')).then(s => { SELLERS = s; drawSellers(); }).catch(() => {});
 } else {
   const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
   const open = pass => fetch(CLOUD.data + '?t=' + Date.now(), { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('データがまだありません（' + r.status + '）'); return r.json(); })
@@ -211,7 +225,7 @@ if (!CLOUD) {
     PASS = pass; try { localStorage.setItem('kyma-pass', pass) } catch(e) {}
     D = d; today = D.built.slice(0, 10);
     $('passF').hidden = true; document.querySelector('header').hidden = false; $('modes').hidden = false;
-    render(); gotRecipes(D.recipes || []);
+    render(); gotRecipes(D.recipes || []); SELLERS = D.sellers || []; drawSellers();
     $('meta').textContent += '　' + VER;
     api('/api/token').then(t => showTok(t.left)).catch(() => {});
   });
@@ -222,6 +236,15 @@ if (!CLOUD) {
 }
 $('modes').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
 $('frecipe').addEventListener('change', drawKnobs);
+$('fsadd').addEventListener('click', () => {
+  const id = sellerIdFrom($('fsurl').value);
+  if (!id) { $('fmsg').textContent = 'セラーIDが読み取れませんでした（URLの me= か seller= の後ろの文字です）'; return; }
+  if (!SELLERS.concat(mySellers()).some(s => s.id === id)) {
+    const l = mySellers(); l.push({ id: id, name: 'この端末で足した ' + id });
+    try { localStorage.setItem('kyma-sellers', JSON.stringify(l)) } catch(e) {}
+  }
+  drawSellers(id); $('fsurl').value = ''; $('fmsg').textContent = 'セラーを選びました。やり方を選んで探してください';
+});
 $('jgo').addEventListener('click', () => {
   $('jmsg').textContent = '調べています…'; $('jout').innerHTML = '';
   api('/api/judge', { q: $('jq').value }).then(d => {
@@ -235,7 +258,9 @@ $('jgo').addEventListener('click', () => {
 $('fgo').addEventListener('click', () => {
   const r = RECIPES.find(x => x.id === $('frecipe').value); if (!r) return;
   $('fmsg').textContent = '探しています…'; $('fout').innerHTML = ''; $('fsave').hidden = true;
-  const body = { recipe: r.id, overrides: overrides(), n: Number($('fn').value) || 0 };
+  const sid = $('fseller').value;
+  if (r.seller && !sid) { $('fmsg').textContent = 'セラーを選ぶか、ストアのURLを貼って足してください'; return; }
+  const body = { recipe: r.id, overrides: overrides(), n: Number($('fn').value) || 0, seller: sid, live: !!r.live };
   api('/api/finder', body).then(d => {
     showTok(d.left);
     if (d.error) { $('fmsg').textContent = d.error; return; }
