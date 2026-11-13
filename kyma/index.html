@@ -82,7 +82,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
   <select id="frecipe"></select>
   <div id="fsellerBox">
     <select id="fseller"></select>
-    <div class="tools"><input id="fsurl" placeholder="AmazonのストアのURL か セラーID を貼る" autocomplete="off"><button class="btn" id="fsadd">足す</button></div>
+    <div class="tools"><input id="fsurl" placeholder="ストアのURL・セラーID・KeepaのファインダーのURL を貼る" autocomplete="off"><button class="btn" id="fsadd">読む</button></div>
   </div>
   <div id="fknobs"></div>
   <div class="tools"><label>判定する件数 <input id="fn" inputmode="numeric" value="5" style="width:56px;flex:none"></label><button class="btn" id="fgo">この条件で探す</button></div>
@@ -93,7 +93,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v3';
+const VER = 'v4';
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
 const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
@@ -153,7 +153,10 @@ const $ = id => document.getElementById(id);
 let PASS = ''; try { PASS = localStorage.getItem('kyma-pass') || localStorage.getItem('nesage-pass') || '' } catch(e) {}
 const post = (u, body) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
 function api(p, body){
-  if (!CLOUD) return body ? post(p, body) : fetch(p).then(r => r.json());
+  if (!CLOUD) {
+    if (body && body.recipe === '__pasted') { const r = RECIPES.find(x => x.id === '__pasted') || {}; body = Object.assign({}, body, { kind: r.judge, selection: Object.assign({}, r.selection, body.overrides) }); }
+    return body ? post(p, body) : fetch(p).then(r => r.json());
+  }
   const op = p.split('/').pop();
   if (op === 'finder') {
     const r = RECIPES.find(x => x.id === body.recipe) || {};
@@ -190,6 +193,30 @@ function drawSellers(keep){
   const all = SELLERS.concat(mySellers());
   $('fseller').innerHTML = '<option value="">セラーを指定しない（Amazon全体から）</option>' + all.map(s => `<option value="${esc(s.id)}">${esc(s.name)}${s.mine ? '（自分の店）' : ''}</option>`).join('');
   if (keep) $('fseller').value = keep;
+}
+/* Keepa の Finder の URL（#以降に条件が入っている）を、Kyma の条件に読み替える */
+function fromKeepaFinder(t){
+  const i = String(t).indexOf('keepa.com/finder#'); if (i < 0) return null;
+  let j; try { j = JSON.parse(decodeURIComponent(String(t).slice(i + 17).trim())); } catch(e) { return { error: 'URLの条件が読めませんでした' }; }
+  const f = j.f || {}, sel = {}, skipped = []; let seller = null, hist = false;
+  for (const [k, v] of Object.entries(f)) {
+    let m;
+    if (k === 'rootCategory') sel.rootCategory = String(v.filter).split(',').map(Number).filter(Boolean);
+    else if (k === 'sellerIds') seller = String(v.filter).split(',')[0].trim();
+    else if (k === 'historicalSellerIds') hist = v.filter === 'on';
+    else if (k === 'AMAZON_outOfStock') { if (v.filter === 'on') sel.availabilityAmazon = [-1, 2, 3, 4]; }
+    else if (k === 'srAvgMonth') { /* 表示用の列なので条件ではない */ }
+    else if ((m = k.match(/^(USED|NEW|COUNT_USED|COUNT_NEW|LISTPRICE|SALES)_(current|avg30|avg90|avg180|deltaPercent30|deltaPercent90)$/)) && v.filterType === 'number') {
+      const base = m[2] + '_' + m[1];
+      if (/greaterThan/.test(v.type) || v.type === 'inRange') sel[base + '_gte'] = Number(v.filter);
+      if (/lessThan/.test(v.type)) sel[base + '_lte'] = Number(v.filter);
+      if (v.type === 'inRange' && v.filterTo != null) sel[base + '_lte'] = Number(v.filterTo);
+    } else skipped.push(k);
+  }
+  const s = (j.s || [])[0], sm = s && String(s.colId).match(/^([A-Z_]+)_(current|avg30|avg90|avg180|deltaPercent30|deltaPercent90)$/);
+  sel.sort = [[sm ? sm[2] + '_' + sm[1] : 'current_SALES', s && s.sort === 'desc' ? 'desc' : 'asc']];
+  if (!sel.rootCategory || !sel.rootCategory.length) sel.rootCategory = [465392];
+  return { sel, seller, live: !hist, skipped };
 }
 function sellerIdFrom(t){
   const m = String(t).match(/[?&](?:me|seller|merchant)=(A[0-9A-Z]{9,15})/) || String(t).trim().match(/^(A[0-9A-Z]{9,15})$/);
@@ -236,14 +263,28 @@ if (!CLOUD) {
 }
 $('modes').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
 $('frecipe').addEventListener('change', drawKnobs);
-$('fsadd').addEventListener('click', () => {
-  const id = sellerIdFrom($('fsurl').value);
-  if (!id) { $('fmsg').textContent = 'セラーIDが読み取れませんでした（URLの me= か seller= の後ろの文字です）'; return; }
+function useSeller(id){
   if (!SELLERS.concat(mySellers()).some(s => s.id === id)) {
     const l = mySellers(); l.push({ id: id, name: 'この端末で足した ' + id });
     try { localStorage.setItem('kyma-sellers', JSON.stringify(l)) } catch(e) {}
   }
-  drawSellers(id); $('fsurl').value = ''; $('fmsg').textContent = 'セラーを選びました。やり方を選んで探してください';
+  drawSellers(id);
+}
+$('fsadd').addEventListener('click', () => {
+  const t = $('fsurl').value, k = fromKeepaFinder(t);
+  if (k) {
+    if (k.error) { $('fmsg').textContent = k.error; return; }
+    RECIPES = RECIPES.filter(r => r.id !== '__pasted');
+    RECIPES.unshift({ id: '__pasted', cat: '貼ったURL', name: (k.seller ? (k.live ? 'いま出品中' : '過去に扱った本も含む') : 'Amazon全体') + 'の条件', judge: 'used', seller: !!k.seller, live: k.live, selection: k.sel });
+    gotRecipes(RECIPES); $('frecipe').value = '__pasted'; drawKnobs();
+    if (k.seller) useSeller(k.seller);
+    $('fsurl').value = '';
+    $('fmsg').textContent = 'KeepaのURLの条件を読みました。' + (k.skipped.length ? '読めなかった条件：' + k.skipped.join('、') : '') + '「この条件で探す」を押してください';
+    return;
+  }
+  const id = sellerIdFrom(t);
+  if (!id) { $('fmsg').textContent = '読み取れませんでした（ストアのURL・セラーID・KeepaのファインダーのURLのどれかを貼ってください）'; return; }
+  useSeller(id); $('fsurl').value = ''; $('fmsg').textContent = 'セラーを選びました。やり方を選んで探してください';
 });
 $('jgo').addEventListener('click', () => {
   $('jmsg').textContent = '調べています…'; $('jout').innerHTML = '';
