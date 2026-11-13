@@ -51,6 +51,15 @@ li{border-bottom:1px solid var(--line);padding:14px 0}
 select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;padding:8px 10px;margin-top:8px}
 .knob{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
 .knob input{width:96px;background:#111;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;padding:6px 8px;text-align:right}
+.kf{padding:8px 0;border-bottom:1px solid var(--line)}
+.kf label{display:block;color:var(--sub);font-size:12px;margin-bottom:4px}
+.kf input,.kf textarea{width:100%;background:#111;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;padding:8px 10px}
+.kf select{margin-top:0}
+.kf .need{border-color:var(--accent)}
+.kf img{max-width:120px;margin-top:8px;border-radius:6px;display:block}
+.kc{display:flex;gap:8px;align-items:center;padding:10px 0;font-size:14px}
+.kgo{width:100%;padding:12px;margin-top:8px;border-color:var(--fg)}
+.kgo.sure{border-color:var(--accent);color:var(--accent)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -72,6 +81,28 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
   </div>
 </header>
 <ul id="list"></ul>
+<section id="kronosV" hidden>
+  <div class="tools"><button class="btn" id="kBack">戻る</button><span class="hint" style="padding:0">Kronosに登録（全トレンド）</span></div>
+  <div class="msg" id="kMsg"></div>
+  <form id="kForm" autocomplete="off">
+    <div class="kf"><label>ASIN</label><input id="k_asin" readonly></div>
+    <div class="kf"><label>タイトル</label><input id="k_title"></div>
+    <div class="kf"><label>タイトル（ひらがな）</label><input id="k_title_kana"></div>
+    <div class="kf"><label>作者</label><input id="k_creator"></div>
+    <div class="kf"><label>作者（ひらがな）</label><input id="k_creator_kana"></div>
+    <div class="kf"><label>出版社</label><input id="k_publisher"></div>
+    <div class="kf"><label>出版社（ひらがな）</label><input id="k_publisher_kana"></div>
+    <div class="kf"><label>チャンネル</label><select id="k_channel_at"><option value="">選択</option><option value="600">単行本</option><option value="650">単行本(小説)</option><option value="680">絵本・児童書</option><option value="700">大型本</option><option value="800">文庫</option><option value="850">文庫(ハウツー)</option><option value="900">新書</option></select></div>
+    <div class="kf"><label>カテゴリ（大分類）</label><select id="k_category1_at"></select></div>
+    <div class="kf"><label>カテゴリ（小分類）</label><select id="k_category2_at"></select></div>
+    <div class="kf"><label>備考</label><textarea id="k_biko" rows="2"></textarea></div>
+    <div class="kf"><label>背表紙の写真</label><input id="k_image" type="file" accept="image/*"><img id="k_prev" alt="" hidden></div>
+    <label class="kc"><input type="checkbox" id="k_recommend">おすすめ</label>
+    <label class="kc"><input type="checkbox" id="k_discord" checked>Discordに通知する</label>
+    <button class="btn kgo" type="submit" id="kGo">Kronosに登録</button>
+  </form>
+  <p class="hint">PCで拡張を使う時は <a id="kExt" href="#" target="_blank" rel="noopener" style="color:var(--fg)">Keepaを開く</a></p>
+</section>
 <section id="judgeV" hidden>
   <p class="hint">ASIN か JAN（バーコードの数字）を入れると、Keepaの履歴からトレンドかどうかを判定します。1回につき1トークン。</p>
   <div class="tools"><input id="jq" inputmode="text" placeholder="ASIN / JAN" autocomplete="off"><button class="btn" id="jgo">調べる</button></div>
@@ -93,7 +124,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v9';
+const VER = 'v10';
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
 const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
@@ -120,7 +151,7 @@ function card(i){
       <div class="why">${esc(i.why)}${i.first_seen ? '　初出 ' + esc(i.first_seen) : ''}</div>
       <img class="g" loading="lazy" alt="" src="https://graph.keepa.com/pricehistory.png?asin=${i.asin}&domain=co.jp&used=1&new=1&range=90&width=600&height=300" onerror="this.remove()">
       ${i.has_new ? `<div class="why">新品（Amazon内）：${i.amazon ? 'Amazon本体 ' + yen(i.amazon) : (i.new ? '出品者のみ ' + yen(i.new) + '〜（' + (i.new_count ?? '–') + '人）' : '出品なし')}</div>` : ''}
-      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a>${/^(4|B0)/.test(i.asin) && (i.tab === 'book' || i.tab === 'newbook' || i.tab === 'set' || i.isBook) ? `<a href="https://keepa.com/product/5-${i.asin}?kk=${i.tab === 'set' ? 'comic' : 'trend'}" target="_blank" rel="noopener">Kronosに登録</a>` : ''}</div>
+      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a>${(i.tab === 'book' || i.tab === 'newbook' || i.isBook) && /^[0-9]/.test(i.asin) ? (CLOUD ? `<a href="#" data-kronos="${i.asin}">Kronosに登録</a>` : `<a href="https://keepa.com/product/5-${i.asin}?kk=trend" target="_blank" rel="noopener">Kronosに登録</a>`) : (i.tab === 'set' ? `<a href="https://keepa.com/product/5-${i.asin}?kk=comic" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>` : '')}</div>
       ${i.ean ? `<div class="links shop"><span>見に行く</span>${SHOPS.map(([n, u]) => `<a href="${u}${i.ean}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>` : ''}
     </li>`;
 }
@@ -320,6 +351,102 @@ $('fsavego').addEventListener('click', () => {
     $('fmsg').textContent = d.error || '毎晩のやり方に足しました。今夜から回ります';
     if (!d.error) $('fsave').hidden = true;
   });
+});
+
+/* ---------- Kronosに登録（本・全トレンド）。下書きは窓口が作り、保存は人が押した時だけ送る ---------- */
+const AT_CAT1 = [
+    ['1201','単行本：実用書'],['1202','単行本：健康・家庭医学'],['1203','単行本：旅行・レジャー・スポーツ'],
+    ['1204','単行本：趣味・就職ガイド・資格'],['1206','単行本：社会・文化'],['1207','単行本：政治'],
+    ['1208','単行本：法律・コンプライアンス'],['1209','単行本：ビジネス・経済'],['1210','単行本：産業・労働'],
+    ['1211','単行本：情報・通信・コンピュータ'],['1212','単行本：テクノロジー・環境'],['1213','単行本：サイエンス'],
+    ['1214','単行本：メディカル'],['1215','単行本：哲学・心理学・宗教'],['1216','単行本：歴史・地理'],
+    ['1217','単行本：語学・会話'],['1218','単行本：教育'],['1219','単行本：芸術・芸能・エンタメ・アート'],
+    ['1220','単行本：文学・エッセイ・詩集'],['1352','単行本：ゲーム攻略本'],['1353','単行本：写真集'],['1354','単行本：辞典'],
+    ['1221','単行本(小説)：小説'],['1222','単行本(小説)：外国の小説'],
+    ['120501','絵本・児童書：絵本'],['120502','絵本・児童書：児童文学'],['120503','絵本・児童書：児童書'],
+    ['1201','大型本：実用書'],['1202','大型本：健康・家庭医学'],['1203','大型本：旅行・レジャー・スポーツ'],
+    ['1204','大型本：趣味・就職ガイド・資格'],['1206','大型本：社会・文化'],['1207','大型本：政治'],
+    ['1208','大型本：法律・コンプライアンス'],['1209','大型本：ビジネス・経済'],['1210','大型本：産業・労働'],
+    ['1211','大型本：情報・通信・コンピュータ'],['1212','大型本：テクノロジー・環境'],['1213','大型本：サイエンス'],
+    ['1214','大型本：メディカル'],['1215','大型本：哲学・心理学・宗教'],['1216','大型本：歴史・地理'],
+    ['1217','大型本：語学・会話'],['1218','大型本：教育'],['1219','大型本：芸術・芸能・エンタメ・アート'],
+    ['1220','大型本：文学・エッセイ・詩集'],['1300','大型本：雑誌'],
+    ['122591','文庫：日本の小説'],['122592','文庫：歴史・時代小説'],['122593','文庫：海外'],
+    ['122594','文庫：官能小説'],['122595','文庫：女性'],
+    ['1224','文庫(ハウツー)'],
+    ['1226','新書：教養・雑学'],['1227','新書：小説・エッセイ・ノンフィクション'],
+  ];
+const AT_PREFIX = {'600':'単行本：','650':'単行本(小説)：','680':'絵本・児童書：','700':'大型本：','800':'文庫：','850':'文庫(ハウツー)','900':'新書：'};
+const KF = ['asin','title','title_kana','creator','creator_kana','publisher','publisher_kana','channel_at','category1_at','category2_at','biko'];
+const KREQ = KF.filter(k => k !== 'biko');
+let kImage = null, kPrevMode = 'list';
+function kFillCat1(keep){
+  const ch = $('k_channel_at').value, pre = AT_PREFIX[ch] || '';
+  $('k_category1_at').innerHTML = `<option value="">${ch ? '選択' : 'チャンネルを先に選択'}</option>` + (ch ? AT_CAT1.filter(([, l]) => l === pre.replace('：', '') || l.startsWith(pre)).map(([v, l]) => `<option value="${v}">${esc(l.includes('：') ? l.split('：')[1] : l)}</option>`).join('') : '');
+  if (keep) $('k_category1_at').value = keep;
+  $('k_category2_at').innerHTML = '<option value="">大分類を先に選択</option>';
+}
+function kFillCat2(){
+  const code = $('k_category1_at').value, sel = $('k_category2_at');
+  sel.innerHTML = `<option value="">${code ? '読み込み中…' : '大分類を先に選択'}</option>`;
+  if (!code) return;
+  api('/api/kronos_cat2', { code: code }).then(d => {
+    sel.innerHTML = d.error ? '<option value="">取得失敗（選び直すと再試行）</option>' : '<option value="">選択</option>' + d.items.map(it => `<option value="${esc(it.code)}">${esc(it.label)}</option>`).join('');
+    if (d.error) $('kMsg').textContent = d.error;
+  }).catch(() => { sel.innerHTML = '<option value="">取得失敗（選び直すと再試行）</option>'; });
+}
+function kMark(){ KREQ.forEach(k => $('k_' + k).classList.toggle('need', !$('k_' + k).value.trim())); }
+function kUnsure(){ $('kGo').classList.remove('sure'); $('kGo').textContent = 'Kronosに登録'; }
+function openKronos(asin){
+  kPrevMode = document.querySelector('#modes button.on') ? document.querySelector('#modes button.on').dataset.m : 'list';
+  ['tabs', 'list', 'src', 'judgeV', 'finderV'].forEach(i => $(i).hidden = true); document.querySelector('header .tools').hidden = true;
+  $('kronosV').hidden = false; window.scrollTo(0, 0);
+  $('kForm').reset(); kImage = null; $('k_prev').hidden = true; kFillCat1(); kUnsure();
+  $('k_asin').value = asin; $('kExt').href = 'https://keepa.com/product/5-' + asin + '?kk=trend';
+  $('kMsg').textContent = '下書きを作っています…（Keepa 1トークン）';
+  api('/api/kronos_prepare', { asin: asin }).then(d => {
+    showTok(d.left);
+    if (d.error) { $('kMsg').textContent = d.error; kMark(); return; }
+    KF.forEach(k => { if (d.draft[k] != null && k !== 'category1_at' && k !== 'category2_at') $('k_' + k).value = d.draft[k]; });
+    kFillCat1(); kMark();
+    $('kMsg').textContent = (d.missing.length ? '読みが取れなかった所があります：' + d.missing.join('・') + '。' : '') + 'カテゴリを選び、背表紙の写真を足してください。色のついた欄が未入力です';
+  }).catch(() => { $('kMsg').textContent = '通信に失敗しました'; });
+}
+document.addEventListener('click', e => { const t = e.target.closest('[data-kronos]'); if (t) { e.preventDefault(); openKronos(t.dataset.kronos); } });
+$('kBack').addEventListener('click', () => { $('kronosV').hidden = true; setMode(kPrevMode); });
+$('k_channel_at').addEventListener('change', () => { kFillCat1(); kMark(); });
+$('k_category1_at').addEventListener('change', () => { kFillCat2(); kMark(); });
+$('kForm').addEventListener('input', () => { kMark(); kUnsure(); });
+$('k_image').addEventListener('change', e => {
+  const f = e.target.files[0]; kImage = null; $('k_prev').hidden = true; kUnsure();
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => {   // 長辺1600pxまでに縮めてから送る（スマホの写真は数MBあるため）
+    const s = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+    c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const url = c.toDataURL('image/jpeg', 0.85);
+    kImage = { b64: url.split(',')[1], name: 'spine_' + $('k_asin').value + '.jpg', type: 'image/jpeg' };
+    $('k_prev').src = url; $('k_prev').hidden = false; URL.revokeObjectURL(img.src);
+  };
+  img.onerror = () => { $('kMsg').textContent = 'この写真は読めませんでした'; };
+  img.src = URL.createObjectURL(f);
+});
+$('kForm').addEventListener('submit', e => {
+  e.preventDefault(); kMark();
+  const miss = KREQ.find(k => !$('k_' + k).value.trim());
+  if (miss) { $('kMsg').textContent = '色のついた欄を埋めてください'; $('k_' + miss).focus(); return; }
+  if (!kImage) { $('kMsg').textContent = '背表紙の写真を選んでください'; return; }
+  const go = $('kGo');
+  if (!go.classList.contains('sure')) { go.classList.add('sure'); go.textContent = 'もう一度押すとKronosに登録します'; return; }
+  const fields = {}; KF.forEach(k => fields[k] = $('k_' + k).value.trim());
+  go.disabled = true; go.textContent = '登録中…'; $('kMsg').textContent = '';
+  api('/api/kronos_register', { fields: fields, image: kImage, recommend: $('k_recommend').checked, send_to_discord: $('k_discord').checked }).then(d => {
+    if (d.error) { $('kMsg').textContent = d.error; return; }
+    $('kMsg').textContent = '登録しました：' + fields.title;
+    $('kForm').reset(); kImage = null; $('k_prev').hidden = true; kFillCat1();
+  }).catch(() => { $('kMsg').textContent = '通信に失敗しました。登録されたかはKronosで確かめてください'; })
+    .then(() => { go.disabled = false; kUnsure(); });
 });
 </script>
 </body>
