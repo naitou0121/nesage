@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-title" content="Kyma">
+<title>Kyma</title>
+<style>
+:root{--bg:#000;--fg:#f2f2f2;--sub:#8a8a8a;--line:#262626;--accent:#ff9f0a}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--fg)}
+body{font:15px/1.5 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;padding:0 16px calc(24px + env(safe-area-inset-bottom));-webkit-text-size-adjust:100%}
+header{position:sticky;top:0;background:var(--bg);padding:calc(12px + env(safe-area-inset-top)) 0 0;z-index:2}
+h1{font-size:17px;font-weight:600}
+.meta{color:var(--sub);font-size:12px;margin-top:2px}
+nav{display:flex;gap:16px;overflow-x:auto;white-space:nowrap;margin-top:12px;border-bottom:1px solid var(--line)}
+nav button{background:none;border:0;color:var(--sub);font:inherit;padding:8px 0;border-bottom:2px solid transparent;margin-bottom:-1px}
+nav button.on{color:var(--fg);border-color:var(--fg)}
+nav b{font-weight:400;font-size:12px;margin-left:4px}
+.tools{display:flex;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.tools input{flex:1;min-width:0;background:#111;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;padding:8px 10px}
+.tools label{display:flex;align-items:center;gap:6px;color:var(--sub);font-size:13px;white-space:nowrap}
+ul{list-style:none}
+li{border-bottom:1px solid var(--line);padding:14px 0}
+.row1{display:flex;gap:8px;align-items:baseline}
+.tag{font-size:11px;color:var(--sub);border:1px solid var(--line);border-radius:4px;padding:0 5px;flex:none}
+.hot .tag.m{color:var(--accent);border-color:var(--accent)}
+.t{font-weight:600;overflow-wrap:anywhere}
+.nums{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px;font-size:13px}
+.nums div span{display:block;color:var(--sub);font-size:11px}
+.up{color:var(--accent)}
+.why{color:var(--sub);font-size:12px;margin-top:6px}
+.g{margin-top:10px;width:100%;aspect-ratio:2/1;background:#0b0b0b;border-radius:6px;display:block;object-fit:contain}
+.links{display:flex;gap:16px;margin-top:8px;font-size:13px}
+.links a{color:var(--fg)}
+.links.shop{flex-wrap:wrap;gap:12px}
+.links.shop span{color:var(--sub)}
+.empty{color:var(--sub);padding:32px 0;text-align:center}
+.src{color:var(--sub);font-size:11px;padding:16px 0}
+.modes{display:flex;gap:8px;margin-top:10px;align-items:center}
+.modes button,.btn{background:#111;border:1px solid var(--line);color:var(--fg);font:inherit;border-radius:8px;padding:6px 12px;white-space:nowrap}
+.modes button.on{border-color:var(--fg)}
+#tok{margin-left:auto;color:var(--sub);font-size:12px}
+.hint,.msg{color:var(--sub);font-size:13px;padding:12px 0 4px}
+.msg{color:var(--accent)}
+select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;padding:8px 10px;margin-top:8px}
+.knob{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+.knob input{width:96px;background:#111;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;padding:6px 8px;text-align:right}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<form id="passF" hidden style="padding:24px 0">
+  <p class="hint">合言葉を入れてください（初回だけ）</p>
+  <input type="text" name="username" value="kyma" autocomplete="username" hidden>
+  <div class="tools"><input id="passI" type="password" name="password" autocomplete="current-password" placeholder="合言葉"><button class="btn" type="submit">開く</button></div>
+  <div class="msg" id="passM"></div>
+</form>
+<header>
+  <h1>Kyma</h1>
+  <div class="meta" id="meta"></div>
+  <div class="modes" id="modes" hidden><button data-m="list" class="on">結果</button><button data-m="judge">調べる</button><button data-m="finder">探す</button><span id="tok"></span></div>
+  <nav id="tabs"></nav>
+  <div class="tools">
+    <input id="q" type="search" placeholder="タイトル・ASINで絞る" autocomplete="off">
+    <label><input id="onlyHot" type="checkbox">強いものだけ</label>
+  </div>
+</header>
+<ul id="list"></ul>
+<section id="judgeV" hidden>
+  <p class="hint">ASIN か JAN（バーコードの数字）を入れると、Keepaの履歴からトレンドかどうかを判定します。1回につき1トークン。</p>
+  <div class="tools"><input id="jq" inputmode="text" placeholder="ASIN / JAN" autocomplete="off"><button class="btn" id="jgo">調べる</button></div>
+  <div class="msg" id="jmsg"></div><ul id="jout"></ul>
+</section>
+<section id="finderV" hidden>
+  <p class="hint">やり方を選んで、数字を動かして試します。1回につき 11＋判定する件数 のトークン。</p>
+  <select id="frecipe"></select>
+  <div id="fknobs"></div>
+  <div class="tools"><label>判定する件数 <input id="fn" inputmode="numeric" value="5" style="width:56px;flex:none"></label><button class="btn" id="fgo">この条件で探す</button></div>
+  <div class="msg" id="fmsg"></div><ul id="fout"></ul>
+  <div class="tools" id="fsave" hidden><input id="fname" placeholder="このやり方の名前" autocomplete="off"><button class="btn" id="fsavego">毎晩のやり方に足す</button></div>
+</section>
+<div class="src" id="src"></div>
+<script>
+let D = /*DATA*/null;
+const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
+const VER = 'v1';
+// 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
+const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
+const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
+let tab = 'newbook';
+try { tab = localStorage.getItem('tab') || tab } catch(e) {}
+if (!TABS.some(t => t[0] === tab)) tab = 'newbook';
+const yen = v => v == null ? '–' : '¥' + Math.round(v).toLocaleString();
+const num = v => v == null ? '–' : (Math.round(v * 10) / 10);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let today = D ? D.built.slice(0, 10) : '';
+
+function card(i){
+    const ratio = i.before && i.now ? (i.now / i.before) : null;
+    const mark = i.mark === 'hot' ? '強' : i.mark === 'warm' ? '注目' : '';
+    const fresh = i.first_seen === today ? '<span class="tag">新</span>' : '';
+    return `<li class="${i.mark}">
+      <div class="row1">${mark ? `<span class="tag m">${mark}</span>` : ''}${fresh}<span class="tag">${esc(i.kind)}</span></div>
+      <div class="t">${esc(i.title)}</div>
+      <div class="nums">
+        <div><span>${esc(i.base)}</span>${yen(i.before)}→<b class="${ratio && ratio >= 1.5 ? 'up' : ''}">${yen(i.now)}</b></div>
+        <div><span>${esc(i.cnt_label || '中古の出品者')}</span>${num(i.cnt_before)}→${num(i.cnt_now)}</div>
+        <div><span>売れた回数</span>${i.sold30 ?? '–'}</div>
+      </div>
+      <div class="why">${esc(i.why)}${i.first_seen ? '　初出 ' + esc(i.first_seen) : ''}</div>
+      <img class="g" loading="lazy" alt="" src="https://graph.keepa.com/pricehistory.png?asin=${i.asin}&domain=co.jp&used=1&new=1&range=90&width=600&height=300" onerror="this.remove()">
+      ${i.has_new ? `<div class="why">新品（Amazon内）：${i.amazon ? 'Amazon本体 ' + yen(i.amazon) : (i.new ? '出品者のみ ' + yen(i.new) + '〜（' + (i.new_count ?? '–') + '人）' : '出品なし')}</div>` : ''}
+      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a></div>
+      ${i.ean ? `<div class="links shop"><span>見に行く</span>${SHOPS.map(([n, u]) => `<a href="${u}${i.ean}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>` : ''}
+    </li>`;
+}
+function render(){
+  document.getElementById('meta').textContent = '更新 ' + D.built;
+  document.getElementById('tabs').innerHTML = TABS.map(([k, n]) => {
+    const c = D.items.filter(i => i.tab === k).length;
+    return `<button data-k="${k}" class="${k === tab ? 'on' : ''}">${n}<b>${c}</b></button>`;
+  }).join('');
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const hot = document.getElementById('onlyHot').checked;
+  const rows = D.items.filter(i => i.tab === tab && (!hot || i.mark === 'hot') &&
+    (!q || i.title.toLowerCase().includes(q) || i.asin.toLowerCase().includes(q)));
+  document.getElementById('list').innerHTML = rows.length ? rows.map(card).join('') : '<li class="empty">該当なし</li>';
+  document.getElementById('src').innerHTML = Object.entries(D.stats || {}).map(([k, v]) => `打率 ${esc(k)}：トレンド${v['トレンド']}・候補${v['候補']}・ノイズ${v['ノイズ']}`).join('<br>') + '<br>' + D.sources.map(s =>
+    `${esc(s.name)}：${esc(s.file)}${s.error ? '（取得エラー：' + esc(s.error) + '）' : ''}`).join('<br>');
+}
+document.getElementById('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  tab = b.dataset.k; try { localStorage.setItem('tab', tab) } catch(e) {}
+  window.scrollTo(0, 0); render();
+});
+document.getElementById('q').addEventListener('input', render);
+document.getElementById('onlyHot').addEventListener('change', render);
+if (D) render();
+
+/* ---------- 調べる・探す（手元サーバーがある時だけ出す。置いただけのページでは出ない） ---------- */
+const $ = id => document.getElementById(id);
+let PASS = ''; try { PASS = localStorage.getItem('kyma-pass') || '' } catch(e) {}
+const post = (u, body) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+function api(p, body){
+  if (!CLOUD) return body ? post(p, body) : fetch(p).then(r => r.json());
+  const op = p.split('/').pop();
+  if (op === 'finder') {
+    const r = RECIPES.find(x => x.id === body.recipe) || {};
+    return post(CLOUD.api, { pass: PASS, op: 'finder', kind: r.judge, n: body.n, selection: Object.assign({}, r.selection, body.overrides) });
+  }
+  return post(CLOUD.api, Object.assign({ pass: PASS, op: op }, body || {}));
+}
+function toItem(h, kind, name){
+  return { tab: '', kind: name, asin: h.asin, title: h.title, mark: h.verdict === 'トレンド' ? 'hot' : h.verdict === '候補' ? 'warm' : '',
+    why: h.verdict + (h.notes && h.notes.length ? '：' + h.notes.join('／') : ''), before: h.pre, now: h.cur,
+    base: { new: '新品 定価→今', gone: '定価→中古の今' }[kind] || '中古 前相場→今', cnt_label: kind === 'used' ? '中古の出品者' : '新品の出品者',
+    cnt_before: h.cu_base, cnt_now: h.cu_now, sold30: h.sold_after, first_seen: '', ean: h.ean };
+}
+function showTok(t){ if (t != null) $('tok').textContent = 'Keepa 残り ' + t; }
+function setMode(m){
+  document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  const L = m === 'list';
+  ['tabs', 'list', 'src'].forEach(i => $(i).hidden = !L); document.querySelector('header .tools').hidden = !L;
+  $('judgeV').hidden = m !== 'judge'; $('finderV').hidden = m !== 'finder';
+}
+const KLABEL = { USED: '中古', NEW: '新品', COUNT_USED: '中古の出品者', COUNT_NEW: '新品の出品者', LISTPRICE: '定価（税抜）' };
+function knobLabel(k){
+  let m;
+  if ((m = k.match(/^salesRankDrops(\d+)_gte$/))) return [m[1] + '日で売れた回数 ≧', 1];
+  if ((m = k.match(/^deltaPercent(\d+)_(COUNT_\w+)_gte$/))) return [KLABEL[m[2]] + 'が' + m[1] + '日平均から減った割合（%）≧', 1];
+  if ((m = k.match(/^deltaPercent(\d+)_(\w+)_lte$/))) return [KLABEL[m[2]] + 'が' + m[1] + '日平均から上がった割合（%）≧', -1];
+  if ((m = k.match(/^(current|avg\d+)_(\w+)_(gte|lte)$/)) && KLABEL[m[2]]) return [(m[1] === 'current' ? '今の' : m[1].slice(3) + '日平均の') + KLABEL[m[2]] + (m[2].startsWith('COUNT') ? '（人）' : '（円）') + (m[3] === 'gte' ? ' ≧' : ' ≦'), 1];
+  if (k === 'publicationDate_gte') return ['発売日がこれ以降（年月日8桁）', 1];
+  return null;
+}
+let RECIPES = [], lastRun = null;
+function drawKnobs(){
+  const r = RECIPES.find(x => x.id === $('frecipe').value); if (!r) return;
+  $('fknobs').innerHTML = Object.entries(r.selection).map(([k, v]) => {
+    const l = typeof v === 'number' ? knobLabel(k) : null;
+    return l ? `<div class="knob"><span>${esc(l[0])}</span><input inputmode="numeric" data-k="${k}" data-s="${l[1]}" value="${v * l[1]}"></div>` : '';
+  }).join('');
+  $('fout').innerHTML = ''; $('fmsg').textContent = ''; $('fsave').hidden = true;
+}
+function overrides(){
+  const o = {}; document.querySelectorAll('#fknobs input').forEach(i => { const n = Number(i.value); if (i.value !== '' && !isNaN(n)) o[i.dataset.k] = n * Number(i.dataset.s); });
+  return o;
+}
+function gotRecipes(rs){
+  RECIPES = rs;
+  $('frecipe').innerHTML = rs.map(r => `<option value="${esc(r.id)}">${esc(r.cat)}｜${esc(r.name)}</option>`).join('');
+  drawKnobs();
+}
+if (!CLOUD) {
+  fetch('/api/token').then(r => r.ok ? r.json() : Promise.reject()).then(t => { $('modes').hidden = false; showTok(t.left); return api('/api/recipes'); }).then(gotRecipes).catch(() => {});
+} else {
+  const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const open = pass => fetch(CLOUD.data + '?t=' + Date.now(), { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('データがまだありません（' + r.status + '）'); return r.json(); })
+    .then(blob => crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey'])
+      .then(k => crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(blob.salt), iterations: blob.iter, hash: 'SHA-256' }, k, { name: 'AES-GCM', length: 256 }, false, ['decrypt']))
+      .then(k => crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(blob.iv) }, k, b64(blob.ct)))
+      .then(buf => JSON.parse(new TextDecoder().decode(buf)), () => { throw new Error('合言葉が違います'); }));
+  const start = pass => open(pass).then(d => {
+    PASS = pass; try { localStorage.setItem('kyma-pass', pass) } catch(e) {}
+    D = d; today = D.built.slice(0, 10);
+    $('passF').hidden = true; document.querySelector('header').hidden = false; $('modes').hidden = false;
+    render(); gotRecipes(D.recipes || []);
+    $('meta').textContent += '　' + VER;
+    api('/api/token').then(t => showTok(t.left)).catch(() => {});
+  });
+  document.querySelector('header').hidden = true;
+  const ask = msg => { $('passF').hidden = false; $('passM').textContent = msg || ''; };
+  if (PASS) start(PASS).catch(e => ask(e.message)); else ask('');
+  $('passF').addEventListener('submit', ev => { ev.preventDefault(); $('passM').textContent = '開いています…'; start($('passI').value.trim()).catch(e => ask(e.message)); });
+}
+$('modes').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
+$('frecipe').addEventListener('change', drawKnobs);
+$('jgo').addEventListener('click', () => {
+  $('jmsg').textContent = '調べています…'; $('jout').innerHTML = '';
+  api('/api/judge', { q: $('jq').value }).then(d => {
+    showTok(d.left);
+    if (d.error) { $('jmsg').textContent = d.error; return; }
+    $('jmsg').textContent = '';
+    const names = { used: '中古の値上がりとして', new: '新品の定価超えとして', gone: '新品が消えた本として' };
+    $('jout').innerHTML = [d.best].concat(Object.keys(d.judges).filter(k => k !== d.best)).map(k => card(toItem(Object.assign({ ean: d.ean }, d.judges[k]), k, names[k]))).join('');
+  }).catch(() => { $('jmsg').textContent = '通信に失敗しました'; });
+});
+$('fgo').addEventListener('click', () => {
+  const r = RECIPES.find(x => x.id === $('frecipe').value); if (!r) return;
+  $('fmsg').textContent = '探しています…'; $('fout').innerHTML = ''; $('fsave').hidden = true;
+  const body = { recipe: r.id, overrides: overrides(), n: Number($('fn').value) || 0 };
+  api('/api/finder', body).then(d => {
+    showTok(d.left);
+    if (d.error) { $('fmsg').textContent = d.error; return; }
+    const t = d.rows.filter(x => x.verdict === 'トレンド').length, c = d.rows.filter(x => x.verdict === '候補').length;
+    $('fmsg').textContent = `該当 ${d.total}件。上から${d.rows.length}件を判定：トレンド${t}・候補${c}・ノイズ${d.rows.length - t - c}`;
+    $('fout').innerHTML = d.rows.map(h => card(toItem(h, d.kind, r.name))).join('');
+    lastRun = body; $('fsave').hidden = !!CLOUD; $('fname').value = '';
+  }).catch(() => { $('fmsg').textContent = '通信に失敗しました'; });
+});
+$('fsavego').addEventListener('click', () => {
+  if (!lastRun) return;
+  api('/api/recipe', Object.assign({ name: $('fname').value }, lastRun)).then(d => {
+    $('fmsg').textContent = d.error || '毎晩のやり方に足しました。今夜から回ります';
+    if (!d.error) $('fsave').hidden = true;
+  });
+});
+</script>
+</body>
+</html>
