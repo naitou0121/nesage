@@ -93,7 +93,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v8';
+const VER = 'v9';
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
 const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
@@ -120,7 +120,7 @@ function card(i){
       <div class="why">${esc(i.why)}${i.first_seen ? '　初出 ' + esc(i.first_seen) : ''}</div>
       <img class="g" loading="lazy" alt="" src="https://graph.keepa.com/pricehistory.png?asin=${i.asin}&domain=co.jp&used=1&new=1&range=90&width=600&height=300" onerror="this.remove()">
       ${i.has_new ? `<div class="why">新品（Amazon内）：${i.amazon ? 'Amazon本体 ' + yen(i.amazon) : (i.new ? '出品者のみ ' + yen(i.new) + '〜（' + (i.new_count ?? '–') + '人）' : '出品なし')}</div>` : ''}
-      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a></div>
+      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a>${/^(4|B0)/.test(i.asin) && (i.tab === 'book' || i.tab === 'newbook' || i.tab === 'set' || i.isBook) ? `<a href="https://keepa.com/product/5-${i.asin}?kk=${i.tab === 'set' ? 'comic' : 'trend'}" target="_blank" rel="noopener">Kronosに登録</a>` : ''}</div>
       ${i.ean ? `<div class="links shop"><span>見に行く</span>${SHOPS.map(([n, u]) => `<a href="${u}${i.ean}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>` : ''}
     </li>`;
 }
@@ -169,7 +169,7 @@ function toItem(h, kind, name){
   return { tab: '', kind: name, asin: h.asin, title: h.title, mark: h.verdict === 'トレンド' ? 'hot' : h.verdict === '候補' ? 'warm' : '',
     why: h.verdict + (h.notes && h.notes.length ? '：' + h.notes.join('／') : ''), before: h.pre, now: h.cur,
     base: { new: '新品 定価→今', gone: '定価→中古の今' }[kind] || '中古 前相場→今', cnt_label: kind === 'used' ? '中古の出品者' : '新品の出品者',
-    cnt_before: h.cu_base, cnt_now: h.cu_now, sold30: h.sold_after, first_seen: '', ean: h.ean };
+    cnt_before: h.cu_base, cnt_now: h.cu_now, sold30: h.sold_after, first_seen: '', ean: h.ean, isBook: /^[0-9]/.test(h.asin) };
 }
 function showTok(t){ if (t != null) $('tok').textContent = 'Keepa 残り ' + t; }
 function setMode(m){
