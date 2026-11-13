@@ -93,7 +93,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v6';
+const VER = 'v7';
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
 const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
@@ -160,7 +160,8 @@ function api(p, body){
   const op = p.split('/').pop();
   if (op === 'finder') {
     const r = RECIPES.find(x => x.id === body.recipe) || {};
-    return post(CLOUD.api, { pass: PASS, op: 'finder', kind: r.judge, n: body.n, seller: body.seller, live: body.live, selection: Object.assign({}, r.selection, body.overrides) });
+    const pool = r.seller_pool && !body.seller ? SELLERS.filter(s => !s.live_only).map(s => s.id) : undefined;
+    return post(CLOUD.api, { pass: PASS, op: 'finder', kind: r.judge, n: body.n, seller: body.seller, sellers: pool, live: body.live, selection: Object.assign({}, r.selection, body.overrides) });
   }
   return post(CLOUD.api, Object.assign({ pass: PASS, op: op }, body || {}));
 }
