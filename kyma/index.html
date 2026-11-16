@@ -124,7 +124,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v11';
+const VER = 'v12';
 // スマホ用の登録画面は、Kronos側の窓口（kronos-proxy・Railway）が 2026-09-06 から止まっているため閉じてある。窓口が戻ったら true にする
 const KRONOS_PHONE = false;
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
@@ -153,7 +153,7 @@ function card(i){
       <div class="why">${esc(i.why)}${i.first_seen ? '　初出 ' + esc(i.first_seen) : ''}</div>
       <img class="g" loading="lazy" alt="" src="https://graph.keepa.com/pricehistory.png?asin=${i.asin}&domain=co.jp&used=1&new=1&range=90&width=600&height=300" onerror="this.remove()">
       ${i.has_new ? `<div class="why">新品（Amazon内）：${i.amazon ? 'Amazon本体 ' + yen(i.amazon) : (i.new ? '出品者のみ ' + yen(i.new) + '〜（' + (i.new_count ?? '–') + '人）' : '出品なし')}</div>` : ''}
-      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a>${(i.tab === 'book' || i.tab === 'newbook' || i.isBook) && /^[0-9]/.test(i.asin) ? (CLOUD && KRONOS_PHONE ? `<a href="#" data-kronos="${i.asin}">Kronosに登録</a>` : `<a href="https://keepa.com/product/5-${i.asin}?kk=trend" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>`) : (i.tab === 'set' ? `<a href="https://keepa.com/product/5-${i.asin}?kk=comic" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>` : '')}</div>
+      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a>${ROLE !== 'admin' ? '' : (i.tab === 'book' || i.tab === 'newbook' || i.isBook) && /^[0-9]/.test(i.asin) ? (CLOUD && KRONOS_PHONE ? `<a href="#" data-kronos="${i.asin}">Kronosに登録</a>` : `<a href="https://keepa.com/product/5-${i.asin}?kk=trend" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>`) : (i.tab === 'set' ? `<a href="https://keepa.com/product/5-${i.asin}?kk=comic" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>` : '')}</div>
       ${i.ean ? `<div class="links shop"><span>見に行く</span>${SHOPS.map(([n, u]) => `<a href="${u}${i.ean}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>` : ''}
     </li>`;
 }
@@ -183,9 +183,11 @@ if (D) render();
 /* ---------- 調べる・探す（手元サーバーがある時だけ出す。置いただけのページでは出ない） ---------- */
 const $ = id => document.getElementById(id);
 // 値下げスターと同じ置き場（同じサイトの中）なので、そちらで入れてあれば合言葉を打たずに開く
+let ROLE = 'admin';
 let PASS = ''; try { PASS = localStorage.getItem('kyma-pass') || localStorage.getItem('nesage-pass') || '' } catch(e) {}
 const post = (u, body) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
 function api(p, body){
+  if (CLOUD && ROLE !== 'admin') return selfApi(p.split('/').pop(), body || {});
   if (!CLOUD) {
     if (body && body.recipe === '__pasted') { const r = RECIPES.find(x => x.id === '__pasted') || {}; body = Object.assign({}, body, { kind: r.judge, selection: Object.assign({}, r.selection, body.overrides) }); }
     return body ? post(p, body) : fetch(p).then(r => r.json());
@@ -277,16 +279,29 @@ if (!CLOUD) {
   fetch('/api/token').then(r => r.ok ? r.json() : Promise.reject()).then(t => { $('modes').hidden = false; showTok(t.left); return api('/api/recipes'); }).then(gotRecipes).then(() => api('/api/sellers')).then(s => { SELLERS = s; drawSellers(); }).catch(() => {});
 } else {
   const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const kdf = (pass, salt, iter) => crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey'])
+    .then(k => crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(salt), iterations: iter, hash: 'SHA-256' }, k, { name: 'AES-GCM', length: 256 }, false, ['decrypt']));
+  const dec = (key, iv, ct) => crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(iv) }, key, b64(ct));
   const open = pass => fetch(CLOUD.data + '?t=' + Date.now(), { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('データがまだありません（' + r.status + '）'); return r.json(); })
-    .then(blob => crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey'])
-      .then(k => crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(blob.salt), iterations: blob.iter, hash: 'SHA-256' }, k, { name: 'AES-GCM', length: 256 }, false, ['decrypt']))
-      .then(k => crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(blob.iv) }, k, b64(blob.ct)))
-      .then(buf => JSON.parse(new TextDecoder().decode(buf)), () => { throw new Error('合言葉が違います'); }));
+    .then(async blob => {
+      if (!blob.wraps) { const k = await kdf(pass, blob.salt, blob.iter); return { role: 'admin', buf: await dec(k, blob.iv, blob.ct) }; }
+      for (const w of blob.wraps) {
+        try {
+          const kek = await kdf(pass, w.salt, blob.iter);
+          const raw = await dec(kek, w.iv, w.ct);
+          const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+          return { role: w.role, buf: await dec(key, blob.iv, blob.ct) };
+        } catch (e) {}
+      }
+      throw new Error('合言葉が違います');
+    })
+    .then(x => { ROLE = x.role; return JSON.parse(new TextDecoder().decode(x.buf)); }, e => { throw new Error(e.message === '合言葉が違います' || /OperationError/.test(String(e)) ? '合言葉が違います' : e.message); });
   const start = pass => open(pass).then(d => {
     PASS = pass; try { localStorage.setItem('kyma-pass', pass) } catch(e) {}
     D = d; today = D.built.slice(0, 10);
     $('passF').hidden = true; document.querySelector('header').hidden = false; $('modes').hidden = false;
     render(); gotRecipes(D.recipes || []); SELLERS = D.sellers || []; drawSellers();
+    if (ROLE !== 'admin') viewerSetup();
     $('meta').textContent += '　' + VER;
     api('/api/token').then(t => showTok(t.left)).catch(() => {});
   });
@@ -354,6 +369,167 @@ $('fsavego').addEventListener('click', () => {
     if (!d.error) $('fsave').hidden = true;
   });
 });
+
+/* ---------- 渡した人の「調べる」「探す」：その人のKeepaの鍵で、端末から直接 Keepa へ（こちらのサーバーを通さない・納豆さんの鍵は使わない） ---------- */
+// Kyma の判定3種（Mac mini 側 trend_app/judge_history.py と同じ中身。直す時は両方直して parity_test で突き合わせる）
+const EPOCH = 21564000;
+const DAY = 86400000;
+const JST = 9 * 3600000;
+
+function series(p, idx) {
+  const csv = p.csv || [];
+  const a = csv[idx];
+  if (!a || !a.length) return [];
+  const out = [];
+  for (let i = 0; i < a.length - 1; i += 2) out.push([(a[i] + EPOCH) * 60000, a[i + 1]]);
+  return out;
+}
+const win = (sr, t0, t1) => sr.filter(([t, v]) => t >= t0 && t <= t1 && v !== -1).map(([, v]) => v);
+function med(v) {
+  if (!v.length) return null;
+  const s = [...v].sort((a, b) => a - b), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+const r2 = (x) => Math.round(x * 100) / 100;
+const g = (x) => (x == null ? 'None' : String(+x));
+const md = (t) => { const d = new Date(t + JST); return String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + String(d.getUTCDate()).padStart(2, '0'); };
+const lastValid = (sr) => { for (let i = sr.length - 1; i >= 0; i--) if (sr[i][1] !== -1) return sr[i][1]; return null; };
+const drops = (rw) => { let n = 0; for (let i = 1; i < rw.length; i++) if (rw[i][1] < rw[i - 1][1] * 0.7) n++; return n; };
+
+function judgeUsed(p, now) {
+  const used = series(p, 2), rank = series(p, 3), cu = series(p, 12), cn = series(p, 11), amz = series(p, 0);
+  const pre = med(win(used, now - 90 * DAY, now - 30 * DAY));
+  const curList = win(used, now - 3 * DAY, now);
+  const cur = curList.length ? curList[curList.length - 1] : (used.length && used[used.length - 1][1] !== -1 ? used[used.length - 1][1] : null);
+  const ratio = pre && cur ? r2(cur / pre) : null;
+  const cuBase = med(win(cu, now - 90 * DAY, now - 30 * DAY));
+  const recent = cu.filter(([t, v]) => t >= now - 30 * DAY && v !== -1);
+  const cuNow = recent.length ? recent[recent.length - 1][1] : null;
+  const cuMin = recent.length ? Math.min(...recent.map((x) => x[1])) : null;
+  const drop = cuBase != null && cuNow != null && cuBase >= 3 && (cuNow === 0 || (cuBase - cuNow >= 3 && cuNow <= cuBase / 2));
+  let tempo = null, tempoDays = null;
+  if (drop && recent.length) {
+    const tMin = recent.find(([, v]) => v === cuMin)[0];
+    let tHi = null;
+    for (const [t, v] of cu) { if (t >= tMin) break; if (v !== -1 && v >= cuBase * 0.7) tHi = t; }
+    if (tHi != null) { tempoDays = Math.round(((tMin - tHi) / DAY) * 10) / 10; tempo = tempoDays <= 2 ? '一気' : 'じわじわ'; }
+  }
+  let jump = null;
+  if (pre) { const f = used.find(([t, v]) => t >= now - 60 * DAY && v !== -1 && v >= pre * 1.5); jump = f ? f[0] : null; }
+  const rw = rank.filter(([, v]) => v !== -1);
+  const soldAfter = jump != null ? drops(rw.filter(([t]) => t >= jump - DAY)) : null;
+  const sold180 = drops(rw.filter(([t]) => t >= now - 180 * DAY));
+  const s1 = ratio != null && ratio >= 1.5, s2 = drop, s3 = soldAfter != null && soldAfter >= 2;
+  const n = s1 + s2 + s3;
+  const notes = [];
+  if (!s1) notes.push(ratio ? `前相場比 ${ratio}倍` : '前相場が取れない');
+  if (!s2) {
+    if (cuBase != null && cuBase < 3) notes.push(`元々出品者${g(cuBase)}人（1人の値付けで動く）`);
+    else notes.push(cuBase != null && cuNow != null ? `出品者 ${g(cuBase)}→${cuNow}（減り方が弱い）` : '出品者の履歴なし');
+  }
+  if (!s3) notes.push(jump != null ? '跳ねたあと売れていない' : '跳ねた日が無い');
+  if (sold180 <= 3) notes.push(`180日で売れ${sold180}回（たまたま疑い）`);
+  return { asin: p.asin, title: p.title || '', verdict: n === 3 ? 'トレンド' : n === 2 ? '候補' : 'ノイズ', pre, cur, ratio, cu_base: cuBase, cu_now: cuNow,
+    tempo, tempo_days: tempoDays, jump: jump != null ? md(jump) : null, sold_after: soldAfter, sold180, signals: { 倍率: s1, 出品者減: s2, 跳ね後に売れ: s3 }, notes };
+}
+
+function judgeNew(p, now) {
+  const nw = series(p, 1), rank = series(p, 3), cn = series(p, 11), amz = series(p, 0), lst = series(p, 4);
+  const lp = lastValid(lst);
+  const teika = lp ? Math.round(lp * 1.1) : null;
+  const cur = nw.length && nw[nw.length - 1][1] !== -1 ? lastValid(nw) : null;
+  const ratio = cur && teika ? r2(cur / teika) : null;
+  const base = med(win(cn, now - 90 * DAY, now - 30 * DAY));
+  const cnNow = cn.length && cn[cn.length - 1][1] !== -1 ? cn[cn.length - 1][1] : null;
+  const amzOut = !amz.length || amz[amz.length - 1][1] === -1;
+  const s2 = cnNow != null && ((base != null && base >= 3 && cnNow <= base * 0.6) || (amzOut && cnNow <= 5));
+  const sold30 = drops(rank.filter(([t, v]) => v !== -1 && t >= now - 30 * DAY));
+  const s1 = ratio != null && ratio >= 1.3, s3 = sold30 >= 5;
+  const n = s1 + s2 + s3;
+  const notes = [];
+  if (!s1) notes.push(ratio ? `定価比 ${ratio}倍` : cur == null ? '新品の出品なし' : '定価が取れない');
+  if (!s2) notes.push(`新品の出品者 ${g(base)}→${cnNow == null ? 'None' : cnNow}（減っていない）`);
+  if (!s3) notes.push(`30日で売れ${sold30}回`);
+  if (!amzOut) notes.push('Amazon本体に在庫あり');
+  return { asin: p.asin, title: p.title || '', verdict: amzOut || n < 3 ? ['ノイズ', 'ノイズ', '候補', 'トレンド'][n] : '候補', pre: teika, cur, ratio, cu_base: base, cu_now: cnNow,
+    tempo: null, jump: null, sold_after: sold30, sold180: null, signals: { 定価超え: s1, 新品の出品者減: s2, 売れている: s3 }, notes };
+}
+
+function judgeGone(p, now) {
+  const used = series(p, 2), col = series(p, 5), cn = series(p, 11), amz = series(p, 0), lst = series(p, 4);
+  const lp = lastValid(lst);
+  const teika = lp ? Math.round(lp * 1.1) : null;
+  const cnNow = cn.length ? cn[cn.length - 1][1] : null;
+  const amzOut = !amz.length || amz[amz.length - 1][1] === -1;
+  const s1 = amzOut && (cnNow == null || cnNow <= 0);
+  const recent = [...win(used, now - 90 * DAY, now), ...win(col, now - 90 * DAY, now)];
+  const cur = recent.length ? Math.min(...recent) : null;
+  const ratio = cur && teika ? r2(cur / teika) : null;
+  const s2 = ratio != null && ratio >= 2;
+  let first = null;
+  if (teika) for (const sr of [used, col]) for (const [t, v] of sr) if (v !== -1 && v >= teika * 2 && (first == null || t < first)) first = t;
+  const held = first != null ? Math.floor((now - first) / DAY) : 0;
+  const s3 = held >= 30;
+  const n = s1 + s2 + s3;
+  const notes = [];
+  if (!s1) notes.push('新品の出品がまだある');
+  if (!s2) notes.push(ratio ? `定価比 ${ratio}倍` : '中古・コレクターの値段が取れない');
+  if (!s3) notes.push(`定価2倍以上になって${held}日`);
+  return { asin: p.asin, title: p.title || '', verdict: ['ノイズ', 'ノイズ', '候補', 'トレンド'][n], pre: teika, cur, ratio, cu_base: null, cu_now: s1 ? 0 : cnNow,
+    tempo: null, jump: first != null ? md(first) : null, sold_after: null, sold180: null, signals: { 新品なし: s1, 定価2倍以上: s2, '30日以上続く': s3 }, notes };
+}
+const JUDGES = { used: judgeUsed, new: judgeNew, gone: judgeGone };
+
+const OK_KEY = /^(rootCategory|availabilityAmazon|sort|publicationDate_(gte|lte)|salesRankDrops(30|90|180)_(gte|lte)|historicalSellerIds|sellerIds|(current|avg30|avg90|avg180|deltaPercent30|deltaPercent90)_(USED|NEW|COUNT_USED|COUNT_NEW|LISTPRICE|SALES)_(gte|lte))$/;
+let MYKEY = ''; try { MYKEY = localStorage.getItem('kyma-keepa') || '' } catch(e) {}
+const keepa = (path, q) => fetch('https://api.keepa.com/' + path + '?' + new URLSearchParams(Object.assign({ key: MYKEY, domain: '5' }, q || {})).toString()).then(r => r.json());
+async function selfGuard(cost){
+  if (!MYKEY) return { error: 'Keepaの鍵が入っていません（下の欄に入れてください）' };
+  const t = await keepa('token');
+  if (t.error) return { error: 'Keepaの鍵が使えません：' + String(t.error.message || t.error.type || '').slice(0, 80) };
+  if ((t.tokensLeft ?? 0) < cost + 2) return { error: `Keepaの残りが足りません（残り${t.tokensLeft}・必要${cost}）。${cost + 2 - t.tokensLeft}分ほど待ってください`, left: t.tokensLeft };
+  return null;
+}
+async function selfApi(op, body){
+  if (op === 'token') { if (!MYKEY) return { left: null }; const t = await keepa('token'); return { left: t.tokensLeft }; }
+  if (op === 'judge') {
+    const q = String(body.q || '').replace(/[^0-9A-Za-z]/g, ''); if (!q) return { error: 'ASIN か JAN を入れてください' };
+    const e = await selfGuard(1); if (e) return e;
+    const r = await keepa('product', Object.assign({ history: '1', days: '180' }, q.length === 10 ? { asin: q } : { code: q }));
+    const p = (r.products || [])[0]; if (!p || !p.title) return { error: 'Keepaに見つかりませんでした', left: r.tokensLeft };
+    const now = Date.now(), judges = {}; for (const k of Object.keys(JUDGES)) judges[k] = JUDGES[k](p, now);
+    const order = { トレンド: 0, 候補: 1, ノイズ: 2 };
+    return { left: r.tokensLeft, best: Object.keys(judges).sort((x, y) => order[judges[x].verdict] - order[judges[y].verdict])[0], judges, ean: (p.eanList || [null])[0] };
+  }
+  if (op === 'finder') {
+    const rc = RECIPES.find(x => x.id === body.recipe) || {};
+    const sel = {}; for (const [k, v] of Object.entries(Object.assign({}, rc.selection, body.overrides))) if (OK_KEY.test(k)) sel[k] = v;
+    if (body.seller) sel[body.live ? 'sellerIds' : 'historicalSellerIds'] = [body.seller];
+    else if (rc.seller_pool) sel.historicalSellerIds = SELLERS.filter(s => !s.live_only).map(s => s.id);
+    else if (rc.seller) return { error: 'セラーを選んでください' };
+    const n = Math.max(0, Math.min(15, parseInt(body.n, 10) || 0));
+    const e = await selfGuard(11 + n); if (e) return e;
+    const q = await keepa('query', { selection: JSON.stringify(Object.assign(sel, { perPage: 50, page: 0 })) });
+    if (q.error) return { error: 'Keepa：' + String(q.error.message || '').slice(0, 160) };
+    const asins = (q.asinList || []).slice(0, n), rows = []; let left = q.tokensLeft;
+    for (let i = 0; i < asins.length; i += 5) {
+      const r = await keepa('product', { asin: asins.slice(i, i + 5).join(','), history: '1', days: '180' }); left = r.tokensLeft;
+      for (const p of r.products || []) { const h = (JUDGES[rc.judge] || JUDGES.used)(p, Date.now()); h.ean = (p.eanList || [null])[0]; rows.push(h); }
+    }
+    return { total: q.totalResults, left, rows, kind: rc.judge };
+  }
+  return { error: 'この操作は使えません' };
+}
+function viewerSetup(){
+  // 渡した人の画面：Kronos関係と「毎晩のやり方に足す」は出さない／Keepaの鍵の欄を出す
+  document.querySelectorAll('#fsave').forEach(x => x.remove());
+  const box = document.createElement('div');
+  box.className = 'tools';
+  box.innerHTML = '<input id="mykey" type="password" autocomplete="off" placeholder="自分のKeepaのAPIの鍵（この端末だけに保存）"><button class="btn" id="mykeygo">保存</button>';
+  ['judgeV', 'finderV'].forEach((id, i) => { const b = i ? box.cloneNode(true) : box; if (i) b.querySelectorAll('[id]').forEach(x => x.id += '2'); $(id).appendChild(b); });
+  const save = v => { MYKEY = v.trim(); try { localStorage.setItem('kyma-keepa', MYKEY) } catch(e) {} api('/api/token').then(t => showTok(t.left)).catch(() => {}); };
+  [['mykey', 'mykeygo'], ['mykey2', 'mykeygo2']].forEach(([i, b]) => { $(b).addEventListener('click', () => { save($(i).value); $(i).value = ''; $(i).placeholder = MYKEY ? '保存しました（入れ直す時はここへ）' : '自分のKeepaのAPIの鍵'; }); if (MYKEY) $(i).placeholder = '保存済み（入れ直す時はここへ）'; });
+}
 
 /* ---------- Kronosに登録（本・全トレンド）。下書きは窓口が作り、保存は人が押した時だけ送る ---------- */
 const AT_CAT1 = [
