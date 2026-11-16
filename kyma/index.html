@@ -124,7 +124,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v13';
+const VER = 'v14';
 // スマホ用の登録画面は、Kronos側の窓口（kronos-proxy・Railway）が 2026-09-06 から止まっているため閉じてある。窓口が戻ったら true にする
 const KRONOS_PHONE = true;
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
@@ -347,7 +347,8 @@ $('jgo').addEventListener('click', () => {
     $('jout').innerHTML = [d.best].concat(Object.keys(d.judges).filter(k => k !== d.best)).map(k => card(toItem(Object.assign({ ean: d.ean }, d.judges[k]), k, names[k]))).join('');
   }).catch(() => { $('jmsg').textContent = '通信に失敗しました'; });
 });
-$('fgo').addEventListener('click', () => {
+$('fgo').addEventListener('click', () => { try { fgoRun(); } catch (err) { $('fmsg').textContent = '止まりました：' + err.message; } });
+function fgoRun(){
   const r = RECIPES.find(x => x.id === $('frecipe').value); if (!r) return;
   $('fmsg').textContent = '探しています…'; $('fout').innerHTML = ''; $('fsave').hidden = true;
   const sid = $('fseller').value;
@@ -361,7 +362,7 @@ $('fgo').addEventListener('click', () => {
     $('fout').innerHTML = d.rows.map(h => card(toItem(h, d.kind, r.name))).join('');
     lastRun = body; $('fsave').hidden = !!CLOUD; $('fname').value = '';
   }).catch(() => { $('fmsg').textContent = '通信に失敗しました'; });
-});
+}
 $('fsavego').addEventListener('click', () => {
   if (!lastRun) return;
   api('/api/recipe', Object.assign({ name: $('fname').value }, lastRun)).then(d => {
@@ -522,7 +523,7 @@ async function selfApi(op, body){
 }
 function viewerSetup(){
   // 渡した人の画面：Kronos関係と「毎晩のやり方に足す」は出さない／Keepaの鍵の欄を出す
-  document.querySelectorAll('#fsave').forEach(x => x.remove());
+  $('fsave').style.display = 'none';   // 消さない：探すの処理がこの箱を触るため（消すと止まる・2026-11-17）
   const box = document.createElement('div');
   box.className = 'tools';
   box.innerHTML = '<input id="mykey" type="password" autocomplete="off" placeholder="自分のKeepaのAPIの鍵（この端末だけに保存）"><button class="btn" id="mykeygo">保存</button>';
