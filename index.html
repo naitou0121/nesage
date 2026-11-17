@@ -156,6 +156,7 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
   font-size:.7rem;color:var(--text2);margin-bottom:7px;font-variant-numeric:tabular-nums}
 .metaline b{color:var(--green);font-weight:800}
 .metaline b.minus{color:var(--red)}
+.metaline .nocost{color:var(--text3);font-weight:700}
 .metaline .cost{border:1px solid var(--yellow-line);background:var(--yellow-pale);border-radius:4px;
   padding:0 4px;color:#8a6d1a;font-weight:700}
 .tracebtn{
@@ -388,7 +389,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30</div>
+  <div class="ver">v30.1</div>
 </header>
 
 <div id="ptPane">
@@ -904,8 +905,14 @@ function cardHTML(it){
   var idle = idleOf(it.sku);
   var idleHtml = (idle != null && idle >= 30)
     ? '<span class="tg tg-idle">' + idle + '日ほっとき</span>' : '';
-  var profitCls = it.profit < 0 ? ' class="minus"' : '';
-  var profitPct = it.price > 0 ? ' (' + (it.profit / it.price * 100).toFixed(0) + '%)' : '';
+  // 粗利はアプリで計算（出品価格 − 仕入 − Amazon手数料 − 送料）。価格を打ち替えていればその価格で出す
+  var priceNow = (chg.price != null && chg.price !== '' && +chg.price > 0) ? +chg.price : it.price;
+  var pf = CORE.profitAt(it, priceNow);
+  var profitHtml;
+  if(!pf) profitHtml = '粗利 <span class="nocost">手数料なし</span>';
+  else if(pf.noCost) profitHtml = '手数料 ' + yen(pf.fee) + ' · 粗利 <span class="nocost">仕入れ値なし</span>';
+  else profitHtml = '手数料 ' + yen(pf.fee) + ' · 粗利 <b' + (pf.profit < 0 ? ' class="minus"' : '') + '>' +
+    yen(pf.profit) + ' (' + (pf.profit / priceNow * 100).toFixed(0) + '%)</b>';
 
   return '<div class="card' + (hasChange ? ' changed' : '') + '" data-sku="' + esc(it.sku) + '">' +
     '<div class="ctop">' +
@@ -926,8 +933,8 @@ function cardHTML(it){
       inputCell('takane', '高値ｽﾄｯﾊﾟｰ') +
     '</div>' +
     '<div class="metaline">' +
-      '仕入 <span class="cost">' + yen(it.cost) + '</span>' +
-      ' · 粗利 <b' + profitCls + '>' + yen(it.profit) + profitPct + '</b>' +
+      '仕入 <span class="cost">' + (it.cost > 0 ? yen(it.cost) : 'なし') + '</span>' +
+      ' · ' + profitHtml +
       (it.number > 1 ? ' · ' + it.number + '個' : '') +
       '<button class="tracebtn ' + traceCls + '" data-act="trace">' + esc(traceLabel) + ' ⇄</button>' +
     '</div>' +

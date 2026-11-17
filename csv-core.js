@@ -111,11 +111,38 @@
         takane: num('takane'),
         condition: v('condition').trim(),
         priceTrace: v('priceTrace').trim(),
-        profit: num('profit'),
+        profit: num('profit'),          // プライスターが出した粗利（表示には使わない・見比べ用）
+        fee: num('amazon-fee'),         // Amazon手数料（販売手数料＋成約料＋配送代行料・税込）
+        shipping: num('shipping-price'),
         dateStr: CORE.skuDate(sku),
       });
     }
     return { header, col, lines, items };
+  };
+
+  /* 粗利はアプリで計算する（プライスターの profit 列は使わない）
+   *   粗利 ＝ 出品価格 − 仕入れ値 − Amazon手数料 − 送料
+   * Amazon手数料はプライスターの amazon-fee 列（商品ごとのサイズ込みの額）。
+   * 価格を打ち替えた時は、価格に比例する分だけ手数料を動かす：
+   *   販売手数料 15.4% × 消費税1.1 ＝ 16.94%（2026-09〜11の出荷済み注文838件・在庫672件の実測。
+   *   15%では合わず 15.4% で配送代行料が 288/318/420… の料金表の値にそろう）
+   *   配送代行料は 1,000円以下で66円安い（1,000円をまたいだ時だけ足し引き）
+   * 仕入れ値が 0 の商品は粗利を出さない（0円仕入れとして大きな粗利に見せない）。 */
+  CORE.FEE_RATE = 0.1694;
+  CORE.feeAt = function (item, price) {
+    if (!(item.fee > 0) || !(item.price > 0) || !(price > 0)) return null;
+    if (price === item.price) return item.fee;
+    let fee = item.fee + Math.round((price - item.price) * CORE.FEE_RATE);
+    if (item.price > 1000 && price <= 1000) fee -= 66;
+    else if (item.price <= 1000 && price > 1000) fee += 66;
+    return fee;
+  };
+  // 戻り値 { fee, profit, noCost } ／ 手数料が取れていない行は null
+  CORE.profitAt = function (item, price) {
+    const fee = CORE.feeAt(item, price);
+    if (fee == null) return null;
+    const noCost = !(item.cost > 0);
+    return { fee, noCost, profit: noCost ? null : price - item.cost - fee - (item.shipping || 0) };
   };
 
   CORE.CONDITION_LABEL = {
