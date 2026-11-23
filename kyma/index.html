@@ -133,7 +133,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v17';
+const VER = 'v18';
 // スマホ用の登録画面は、Kronos側の窓口（kronos-proxy・Railway）が 2026-09-06 から止まっているため閉じてある。窓口が戻ったら true にする
 const KRONOS_PHONE = true;
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
@@ -155,7 +155,7 @@ const W_REASON = '今の波形だとトレンドとして微妙だけど、今�
 const watchAll = () => { try { return JSON.parse(localStorage.getItem('kyma-watch') || '{}') } catch(e) { return {} } };
 const watchSave = w => { try { localStorage.setItem('kyma-watch', JSON.stringify(w)) } catch(e) {} };
 const LAST = {};
-let ROLE = 'admin';   // v16: card() が読むので先に置く（手元版は読み込み時に描くため、後ろにあると止まっていた）   // 直近に描いたカードの元データ（調べる・探すの結果もチェックできるように）
+let ROLE = 'admin';   // v18: 役割で出し分けない（2026-11-23 納豆さん「みきさんが使って僕が指示をもらって直す。完全に一致させて」）。窓口は2人の合言葉をどちらも受ける   // v16: card() が読むので先に置く（手元版は読み込み時に描くため、後ろにあると止まっていた）   // 直近に描いたカードの元データ（調べる・探すの結果もチェックできるように）
 function watchToggle(i, on){
   const w = watchAll();
   if (on) { const c = Object.assign({}, i); delete c.has_new; delete c._w; w[i.asin] = { since: today || new Date().toISOString().slice(0, 10), reason: W_REASON, item: c, seen: today }; }
@@ -201,8 +201,8 @@ function card(i){
       <div class="why">${esc(i.why)}${i.first_seen ? '　初出 ' + esc(i.first_seen) : ''}</div>
       <img class="g" loading="lazy" alt="" src="https://graph.keepa.com/pricehistory.png?asin=${i.asin}&domain=co.jp&used=1&new=1&range=90&width=600&height=300" onerror="this.remove()">
       ${i.has_new ? `<div class="why">新品（Amazon内）：${i.amazon ? 'Amazon本体 ' + yen(i.amazon) : (i.new ? '出品者のみ ' + yen(i.new) + '〜（' + (i.new_count ?? '–') + '人）' : '出品なし')}</div>` : ''}
-      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a>${ROLE !== 'admin' ? '' : (i.tab === 'book' || i.tab === 'newbook' || i.isBook) && /^[0-9]/.test(i.asin) ? (CLOUD && KRONOS_PHONE ? `<a href="#" data-kronos="${i.asin}">Kronosに登録</a>` : `<a href="https://keepa.com/product/5-${i.asin}?kk=trend" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>`) : (i.tab === 'set' ? `<a href="https://keepa.com/product/5-${i.asin}?kk=comic" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>` : '')}</div>
-      ${CLOUD && ROLE === 'admin' ? `<div class="links"><a href="#" data-bo="${i.asin}" data-jan="${i.ean || ''}" data-title="${esc(i.title)}">ブックオフの棚・在庫を見る</a></div><div class="bo" id="bo_${i.asin}" hidden></div>` : ''}
+      <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a>${(i.tab === 'book' || i.tab === 'newbook' || i.isBook) && /^[0-9]/.test(i.asin) ? (CLOUD && KRONOS_PHONE ? `<a href="#" data-kronos="${i.asin}">Kronosに登録</a>` : `<a href="https://keepa.com/product/5-${i.asin}?kk=trend" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>`) : (i.tab === 'set' ? `<a href="https://keepa.com/product/5-${i.asin}?kk=comic" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>` : '')}</div>
+      ${CLOUD ? `<div class="links"><a href="#" data-bo="${i.asin}" data-jan="${i.ean || ''}" data-title="${esc(i.title)}">ブックオフの棚・在庫を見る</a></div><div class="bo" id="bo_${i.asin}" hidden></div>` : ''}
       ${(i.ean || i.title) ? `<div class="links shop"><span>見に行く</span>${SHOPS.filter(([n, u, by]) => by === 'title' || i.ean).map(([n, u, by]) => `<a href="${u}${shopQ(i, by)}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>` : ''}
     </li>`;
 }
@@ -236,7 +236,9 @@ const $ = id => document.getElementById(id);
 let PASS = ''; try { PASS = localStorage.getItem('kyma-pass') || localStorage.getItem('nesage-pass') || '' } catch(e) {}
 const post = (u, body) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
 function api(p, body){
-  if (CLOUD && ROLE !== 'admin') return selfApi(p.split('/').pop(), body || {});
+  // 2026-11-23 納豆さん「これはみきさんのKeepaでできるようにして」：自分の鍵が入っている端末は Keepa を自分の鍵で叩く（窓口の鍵＝納豆さんの残りを使わない）
+  // 納豆さん「僕は僕のKeepa、みきさんはみきさんの」：渡した人の端末は必ず自分の鍵（空なら「鍵を入れてください」で止まる）。納豆さんの端末は窓口の鍵、自分の鍵を入れればそれ
+  if (CLOUD && (MYKEY || ROLE !== 'admin') && ['token', 'judge', 'finder'].includes(p.split('/').pop())) return selfApi(p.split('/').pop(), body || {});
   if (!CLOUD) {
     if (body && body.recipe === '__pasted') { const r = RECIPES.find(x => x.id === '__pasted') || {}; body = Object.assign({}, body, { kind: r.judge, selection: Object.assign({}, r.selection, body.overrides) }); }
     return body ? post(p, body) : fetch(p).then(r => r.json());
@@ -350,8 +352,8 @@ if (!CLOUD) {
     D = d; today = D.built.slice(0, 10);
     $('passF').hidden = true; document.querySelector('header').hidden = false; $('modes').hidden = false;
     render(); gotRecipes(D.recipes || []); SELLERS = D.sellers || []; drawSellers();
-    if (ROLE !== 'admin') viewerSetup();
-    if (ROLE === 'admin' && (D.stores || []).length) $('hereBar').hidden = false;
+    keyBox();
+    if ((D.stores || []).length) $('hereBar').hidden = false;
     $('meta').textContent += '　' + VER;
     api('/api/token').then(t => showTok(t.left)).catch(() => {});
   });
@@ -571,9 +573,8 @@ async function selfApi(op, body){
   }
   return { error: 'この操作は使えません' };
 }
-function viewerSetup(){
-  // 渡した人の画面：Kronos関係と「毎晩のやり方に足す」は出さない／Keepaの鍵の欄を出す
-  $('fsave').style.display = 'none';   // 消さない：探すの処理がこの箱を触るため（消すと止まる・2026-11-17）
+function keyBox(){
+  // 全員に「自分のKeepaの鍵」の欄を出す（v18）。入れた端末だけ自分の鍵で動く。空なら窓口の鍵（納豆さん）
   const box = document.createElement('div');
   box.className = 'tools';
   box.innerHTML = '<input id="mykey" type="password" autocomplete="off" placeholder="自分のKeepaのAPIの鍵（この端末だけに保存）"><button class="btn" id="mykeygo">保存</button>';
