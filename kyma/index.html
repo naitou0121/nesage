@@ -28,6 +28,10 @@ nav b{font-weight:400;font-size:12px;margin-left:4px}
 ul{list-style:none}
 li{border-bottom:1px solid var(--line);padding:14px 0}
 .row1{display:flex;gap:8px;align-items:baseline}
+.w{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:13px;color:var(--sub);white-space:nowrap;cursor:pointer}
+.w input{width:18px;height:18px;accent-color:var(--accent)}
+.w.on{color:var(--accent)}
+.wr{font-size:12px;color:var(--accent);margin-top:4px}.wr a{color:var(--sub);margin-left:6px}
 .tag{font-size:11px;color:var(--sub);border:1px solid var(--line);border-radius:4px;padding:0 5px;flex:none}
 .hot .tag.m{color:var(--accent);border-color:var(--accent)}
 .t{font-weight:600;overflow-wrap:anywhere}
@@ -129,7 +133,7 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v15';
+const VER = 'v16';
 // スマホ用の登録画面は、Kronos側の窓口（kronos-proxy・Railway）が 2026-09-06 から止まっているため閉じてある。窓口が戻ったら true にする
 const KRONOS_PHONE = true;
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
@@ -137,18 +141,55 @@ const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
 let tab = 'newbook';
 try { tab = localStorage.getItem('tab') || tab } catch(e) {}
-if (!TABS.some(t => t[0] === tab)) tab = 'newbook';
+if (tab !== 'watch' && !TABS.some(t => t[0] === tab)) tab = 'newbook';
 const yen = v => v == null ? '–' : '¥' + Math.round(v).toLocaleString();
 const num = v => v == null ? '–' : (Math.round(v * 10) / 10);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let today = D ? D.built.slice(0, 10) : '';
+/* 追跡（2026-11-23 納豆さん「チェックを押せるように。チェックが入ってると毎日その商品を見られるように」）
+   チェック＝「今の波形だとトレンドとして微妙だけど、今後の動きになるから」追う印。この端末だけに保存。
+   毎晩の結果にその本がまだ載っていれば新しい数字で、消えていれば最後に見た数字で出す */
+const W_REASON = '今の波形だとトレンドとして微妙だけど、今後の動きになるから';
+const watchAll = () => { try { return JSON.parse(localStorage.getItem('kyma-watch') || '{}') } catch(e) { return {} } };
+const watchSave = w => { try { localStorage.setItem('kyma-watch', JSON.stringify(w)) } catch(e) {} };
+const LAST = {};
+let ROLE = 'admin';   // v16: card() が読むので先に置く（手元版は読み込み時に描くため、後ろにあると止まっていた）   // 直近に描いたカードの元データ（調べる・探すの結果もチェックできるように）
+function watchToggle(i, on){
+  const w = watchAll();
+  if (on) { const c = Object.assign({}, i); delete c.has_new; delete c._w; w[i.asin] = { since: today || new Date().toISOString().slice(0, 10), reason: W_REASON, item: c, seen: today }; }
+  else delete w[i.asin];
+  watchSave(w); if (D) render();
+}
+function watchRows(){
+  const w = watchAll(); let dirty = false;
+  const rows = Object.values(w).sort((a, b) => (b.since > a.since ? 1 : -1)).map(x => {
+    const live = D && D.items.find(i => i.asin === x.item.asin);
+    if (live) { x.item = Object.assign({}, live); x.seen = today; dirty = true; }
+    return Object.assign({}, x.item, { tab: 'watch' });
+  });
+  if (dirty) watchSave(w);
+  return rows;
+}
+document.addEventListener('change', e => {
+  const c = e.target.closest('input[data-w]'); if (!c) return;
+  const i = LAST[c.dataset.w] || (D && D.items.find(x => x.asin === c.dataset.w)); if (i) watchToggle(i, c.checked);
+});
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[data-wr]'); if (!a) return; e.preventDefault();
+  const w = watchAll(); const x = w[a.dataset.wr]; if (!x) return;
+  const r = prompt('追う理由（この本について）', x.reason); if (r == null) return;
+  x.reason = r.trim() || W_REASON; watchSave(w); if (D) render();
+});
 
 function card(i){
+    LAST[i.asin] = i;
+    const w = watchAll()[i.asin];
     const ratio = i.before && i.now ? (i.now / i.before) : null;
     const mark = i.mark === 'hot' ? '強' : i.mark === 'warm' ? '注目' : '';
     const fresh = i.first_seen === today ? '<span class="tag">新</span>' : '';
     return `<li class="${i.mark}">
-      <div class="row1">${mark ? `<span class="tag m">${mark}</span>` : ''}${fresh}<span class="tag">${esc(i.kind)}</span></div>
+      <div class="row1">${mark ? `<span class="tag m">${mark}</span>` : ''}${fresh}<span class="tag">${esc(i.kind)}</span><label class="w ${w ? 'on' : ''}"><input type="checkbox" data-w="${i.asin}" ${w ? 'checked' : ''}>追う</label></div>
+      ${w ? `<div class="wr">📌 ${esc(w.since)}から追跡　${esc(w.reason)}<a href="#" data-wr="${i.asin}">理由を直す</a>${w.seen && w.seen !== today ? '　（最後に載った日 ' + esc(w.seen) + '）' : ''}</div>` : ''}
       <div class="t">${esc(i.title)}</div>
       <div class="nums">
         <div><span>${esc(i.base)}</span>${yen(i.before)}→<b class="${ratio && ratio >= 1.5 ? 'up' : ''}">${yen(i.now)}</b></div>
@@ -165,15 +206,16 @@ function card(i){
 }
 function render(){
   document.getElementById('meta').textContent = '更新 ' + D.built;
-  document.getElementById('tabs').innerHTML = TABS.map(([k, n]) => {
-    const c = D.items.filter(i => i.tab === k).length;
+  const nW = Object.keys(watchAll()).length;
+  document.getElementById('tabs').innerHTML = [['watch', '📌追跡']].concat(TABS).map(([k, n]) => {
+    const c = k === 'watch' ? nW : D.items.filter(i => i.tab === k).length;
     return `<button data-k="${k}" class="${k === tab ? 'on' : ''}">${n}<b>${c}</b></button>`;
   }).join('');
   const q = document.getElementById('q').value.trim().toLowerCase();
   const hot = document.getElementById('onlyHot').checked;
-  const rows = D.items.filter(i => i.tab === tab && (!hot || i.mark === 'hot') &&
+  const rows = (tab === 'watch' ? watchRows() : D.items.filter(i => i.tab === tab)).filter(i => (!hot || i.mark === 'hot') &&
     (!q || i.title.toLowerCase().includes(q) || i.asin.toLowerCase().includes(q)));
-  document.getElementById('list').innerHTML = rows.length ? rows.map(card).join('') : '<li class="empty">該当なし</li>';
+  document.getElementById('list').innerHTML = rows.length ? rows.map(card).join('') : (tab === 'watch' ? '<li class="empty">追っている本はまだありません。カードの「追う」にチェックを入れると、ここに毎日残ります</li>' : '<li class="empty">該当なし</li>');
   document.getElementById('src').innerHTML = Object.entries(D.stats || {}).map(([k, v]) => `打率 ${esc(k)}：トレンド${v['トレンド']}・候補${v['候補']}・ノイズ${v['ノイズ']}`).join('<br>') + '<br>' + D.sources.map(s =>
     `${esc(s.name)}：${esc(s.file)}${s.error ? '（取得エラー：' + esc(s.error) + '）' : ''}`).join('<br>');
 }
@@ -189,7 +231,6 @@ if (D) render();
 /* ---------- 調べる・探す（手元サーバーがある時だけ出す。置いただけのページでは出ない） ---------- */
 const $ = id => document.getElementById(id);
 // 値下げスターと同じ置き場（同じサイトの中）なので、そちらで入れてあれば合言葉を打たずに開く
-let ROLE = 'admin';
 let PASS = ''; try { PASS = localStorage.getItem('kyma-pass') || localStorage.getItem('nesage-pass') || '' } catch(e) {}
 const post = (u, body) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
 function api(p, body){
