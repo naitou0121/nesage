@@ -133,11 +133,13 @@ select{width:100%;background:#111;border:1px solid var(--line);border-radius:8px
 <script>
 let D = /*DATA*/null;
 const CLOUD = {"data": "https://kyma-data.naitou0121.workers.dev/latest.json", "api": "https://kyma-api.naitou0121.workers.dev"};   // 外向け版だけ {data, api}。手元版は null
-const VER = 'v16';
+const VER = 'v17';
 // スマホ用の登録画面は、Kronos側の窓口（kronos-proxy・Railway）が 2026-09-06 から止まっているため閉じてある。窓口が戻ったら true にする
 const KRONOS_PHONE = true;
 // 店の在庫は機械で取りに行かない。JAN入りの検索ページを人が開くだけ（2026-09-14 書店在庫リンク台と同じ考え方）
-const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=']];
+const SHOPS = [['楽天ブックス','https://books.rakuten.co.jp/search?sitem='],['Yahoo!','https://shopping.yahoo.co.jp/search?p='],['ブックオフ','https://shopping.bookoff.co.jp/search/keyword/'],['メルカリ','https://jp.mercari.com/search?keyword=','title']];
+// 2026-11-23 納豆さん「メルカリ押すと数字で検索になってる。タイトル検索にして」→ メルカリだけJANでなくタイトル（括弧より前）で検索
+const shopQ = (i, by) => by === 'title' ? encodeURIComponent(String(i.title || '').split(/[\(（\[［【]/)[0].trim() || i.title || '') : i.ean;
 const TABS = [['newbook','新品本'],['book','中古本'],['cd','CD'],['dvd','DVD'],['set','セット本']];
 let tab = 'newbook';
 try { tab = localStorage.getItem('tab') || tab } catch(e) {}
@@ -201,7 +203,7 @@ function card(i){
       ${i.has_new ? `<div class="why">新品（Amazon内）：${i.amazon ? 'Amazon本体 ' + yen(i.amazon) : (i.new ? '出品者のみ ' + yen(i.new) + '〜（' + (i.new_count ?? '–') + '人）' : '出品なし')}</div>` : ''}
       <div class="links"><a href="https://keepa.com/#!product/5-${i.asin}" target="_blank" rel="noopener">Keepa</a><a href="https://www.amazon.co.jp/dp/${i.asin}" target="_blank" rel="noopener">Amazon</a>${ROLE !== 'admin' ? '' : (i.tab === 'book' || i.tab === 'newbook' || i.isBook) && /^[0-9]/.test(i.asin) ? (CLOUD && KRONOS_PHONE ? `<a href="#" data-kronos="${i.asin}">Kronosに登録</a>` : `<a href="https://keepa.com/product/5-${i.asin}?kk=trend" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>`) : (i.tab === 'set' ? `<a href="https://keepa.com/product/5-${i.asin}?kk=comic" target="_blank" rel="noopener">Kronosに登録（PCの拡張）</a>` : '')}</div>
       ${CLOUD && ROLE === 'admin' ? `<div class="links"><a href="#" data-bo="${i.asin}" data-jan="${i.ean || ''}" data-title="${esc(i.title)}">ブックオフの棚・在庫を見る</a></div><div class="bo" id="bo_${i.asin}" hidden></div>` : ''}
-      ${i.ean ? `<div class="links shop"><span>見に行く</span>${SHOPS.map(([n, u]) => `<a href="${u}${i.ean}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>` : ''}
+      ${(i.ean || i.title) ? `<div class="links shop"><span>見に行く</span>${SHOPS.filter(([n, u, by]) => by === 'title' || i.ean).map(([n, u, by]) => `<a href="${u}${shopQ(i, by)}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>` : ''}
     </li>`;
 }
 function render(){
