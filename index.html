@@ -130,6 +130,16 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .tg-trace.aim{background:var(--orange-deep);color:#fff;border-color:#c65f08}
 .tg-stuck{background:var(--pink-pale);color:var(--red);border-color:#f0c4c1}
 .tg-idle{background:#fff4e0;color:#a35a00;border-color:#f0d5a8}
+.tg-teishi{background:#fdeceb;color:#b3261e;border-color:#f0b3ae}
+.teishibox{margin:8px 10px 0;padding:10px 12px;background:#fff;border:1px solid #f0b3ae;border-radius:8px;font-size:.8rem;line-height:1.5}
+.teishibox h3{font-size:.86rem;margin:0 0 2px}
+.teishibox .tnote{color:var(--text2);font-size:.74rem}
+.teishibox .tgrp{margin-top:8px;font-weight:800}
+.teishibox .trow{display:flex;gap:8px;justify-content:space-between;border-top:1px dashed var(--line);padding:5px 0}
+.teishibox .trow .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.teishibox .trow .tp{flex:0 0 auto;color:var(--text2);font-variant-numeric:tabular-nums}
+.teishibox details{margin-top:8px}
+.teishibox summary{font-weight:800;cursor:pointer}
 .cdate{font-size:.7rem;color:var(--text2);margin-left:auto}
 .cdate .days{font-weight:800}
 .cdate .days.old{color:var(--red)}
@@ -391,7 +401,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.3</div>
+  <div class="ver">v30.4</div>
 </header>
 
 <div id="ptPane">
@@ -404,6 +414,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
   <div class="chiprow">
     <button class="chip on" id="sortChip" data-mode="new">新しい順</button>
     <button class="chip" id="favChip">★お気に入り</button>
+    <button class="chip" id="teishiChip" hidden>出品停止</button>
     <button class="chip" id="stuckChip">下限張り付き</button>
     <button class="chip" id="idleChip">ほっとき</button>
     <button class="chip" id="changedChip">変更のみ</button>
@@ -413,6 +424,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
   <div class="stats" id="stats"></div>
 </div>
 
+<div class="teishibox" id="teishiBox" hidden></div>
 <div id="list">
   <div class="empty" id="emptyMsg">
     <span class="big">📦</span>
@@ -599,6 +611,73 @@ function updateFavChips(){
   var m = (typeof fmParsed !== 'undefined' && fmParsed) ? fmParsed.items.filter(function(it){ return favs.fm[it.id]; }).length : 0;
   $('fmFavChip').textContent = '★お気に入り' + (m ? ' ' + m : '');
 }
+/* 出品停止（v30.4）：Amazon の「価格の誤設定」メールで止まった商品。毎朝 Mac mini が拾って Worker に置いた一覧を読むだけ。
+ * 値段と返送を決めるのは納豆さん。アプリは「どういう状況か」を出すところまで（値段は入れない・返送の手続きはしない）。 */
+var onlyTeishi = false;
+var teishi = (function(){ try{ return JSON.parse(localStorage.getItem('nesage-teishi') || 'null'); }catch(e){ return null; } })();
+var teishiMap = {};
+function teishiIndex(){
+  teishiMap = {};
+  if(teishi && teishi.items) teishi.items.forEach(function(it){ teishiMap[it.sku] = it; });
+}
+teishiIndex();
+function loadTeishi(){
+  var pass = localStorage.getItem(LS_PASS);
+  if(!pass) return Promise.resolve();
+  return fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass, op: 'teishiGet' }) })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j || !j.ok || !j.data) return;
+      teishi = j.data;
+      try{ localStorage.setItem('nesage-teishi', JSON.stringify(teishi)); }catch(e){}
+      teishiIndex();
+      if(site === 'pricetar') refresh();
+    })
+    .catch(function(){});   // 取れなくても値下げの作業は止めない（前に読んだ一覧のまま出す）
+}
+var TEISHI_WHERE = { fba_active: 'FBA', fba_inactive: 'FBA', self_active: '自己発送', self_inactive: '自己発送', none: '居場所不明' };
+function teishiMD(s){ return s ? (+s.slice(5, 7)) + '/' + (+s.slice(8, 10)) : ''; }
+// 一覧が何日前のものか（毎朝の拾いが止まると古いまま出るので、常に見せる）
+function teishiAgeDays(){
+  if(!teishi || !teishi.at) return null;
+  var d = Date.parse(teishi.at);
+  return isNaN(d) ? null : Math.floor((Date.now() - d) / 86400000);
+}
+function renderTeishi(){
+  var items = (teishi && teishi.items) || [];
+  var act = items.filter(function(it){ return it.number > 0; });
+  $('teishiChip').hidden = !items.length;
+  $('teishiChip').textContent = '出品停止' + (act.length ? ' ' + act.length : '');
+  var box = $('teishiBox');
+  if(!onlyTeishi || !items.length){ box.hidden = true; return; }
+  var inList = {};
+  if(parsed) parsed.items.forEach(function(it){ if(teishiMap[it.sku]) inList[it.sku] = 1; });
+  var fba = act.filter(function(it){ return TEISHI_WHERE[it.where] === 'FBA'; });
+  var self = act.filter(function(it){ return TEISHI_WHERE[it.where] !== 'FBA'; });
+  var zero = items.filter(function(it){ return !(it.number > 0); });
+  function row(it){
+    return '<div class="trow"><span class="tt">' + esc(teishiMD(it.firstSeen)) + '〜 ' + esc(TEISHI_WHERE[it.where] || '') + '　' + esc(it.title || it.sku) + '</span>' +
+      '<span class="tp">' + (it.price != null ? yen(it.price) : (it.mailPrice != null ? yen(it.mailPrice) : '')) + '</span></div>';
+  }
+  var age = teishiAgeDays();
+  var when = teishi.at ? new Date(teishi.at).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+  var h = '<h3>Amazonで出品が止まっている商品 ' + items.length + '件</h3>' +
+    '<div class="tnote">' + (age != null && age >= 2 ? '⚠️ ' + age + '日前の一覧です（毎朝の拾いが止まっているかも）。' : '') + esc(when) + ' に拾った分。値段と返送は納豆さんが決めます。</div>';
+  h += '<div class="tgrp">FBA・在庫あり ' + fba.length + '件（値下げするか、返送するか）</div>';
+  var fbaOut = fba.filter(function(it){ return !inList[it.sku]; });
+  if(fba.length - fbaOut.length) h += '<div class="tnote">下のカード ' + (fba.length - fbaOut.length) + '件で値段を変えられます。返送はセラーセントラルで。</div>';
+  h += fbaOut.map(row).join('');
+  if(self.length){
+    h += '<div class="tgrp">自己発送・在庫あり ' + self.length + '件</div>' +
+      '<div class="tnote">このアプリの一覧（FBA・出品中）に無いので、ここでは値段を変えられません。</div>' + self.map(row).join('');
+  }
+  if(zero.length){
+    h += '<details><summary>数量0 ' + zero.length + '件（売れた・出し直し済みなど）</summary>' +
+      '<div class="tnote">FBAで数量0のものは、売れたのか倉庫で止まっているのかを、プライスターからは見分けられません。</div>' + zero.map(row).join('') + '</details>';
+  }
+  box.innerHTML = h;
+  box.hidden = false;
+}
 function favBtnHTML(kind, key){
   var on = !!favs[kind][key];
   return '<button class="abtn fav' + (on ? ' on' : '') + '" data-act="' + (kind === 'fm' ? 'fmfav' : 'fav') +
@@ -770,6 +849,7 @@ $('cloudBtn').addEventListener('click', function(){
         localStorage.setItem(LS_PASS, pass);
         var label = 'クラウド ' + new Date(blob.fetchedAt).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) + ' 取得';
         ingestBytes(u8, blob.name || 'editUploadProduct_FBA.csv', label);
+        loadTeishi();
       }).catch(function(e){
         if(e && e.name === 'OperationError'){
           localStorage.removeItem(LS_PASS);
@@ -844,6 +924,11 @@ $('idleChip').addEventListener('click', function(){
   this.classList.toggle('on', idleDays > 0);
   refresh();
 });
+$('teishiChip').addEventListener('click', function(){
+  onlyTeishi = !onlyTeishi;
+  this.classList.toggle('on', onlyTeishi);
+  refresh();
+});
 $('favChip').addEventListener('click', function(){
   onlyFav = !onlyFav;
   this.classList.toggle('on', onlyFav);
@@ -873,6 +958,7 @@ function computeVisible(){
       if(idle == null || idle < idleDays) return false;  // 台帳に無い商品は出さない
     }
     if(onlyFav && !favs.pt[it.sku]) return false;
+    if(onlyTeishi && !teishiMap[it.sku]) return false;
     if(onlyChanged && !(it.sku in changes)) return false;
     if(query){
       var hay = (it.title + ' ' + it.sku + ' ' + it.asin).toLowerCase();
@@ -960,6 +1046,7 @@ function cardHTML(it){
         '<button class="ctitle" data-act="amazon">' + esc(it.title) + '</button>' +
         '<div class="tagrow">' +
           '<span class="tg tg-cond' + (isCol ? ' collector' : '') + '">' + esc(condText) + '</span>' +
+          (teishiMap[it.sku] ? '<span class="tg tg-teishi">出品停止 ' + esc(teishiMD(teishiMap[it.sku].firstSeen)) + '〜・FBA</span>' : '') +
           (stuck ? '<span class="tg tg-stuck">下限張り付き</span>' : '') +
           idleHtml +
           dateHtml +
@@ -1011,6 +1098,7 @@ function refresh(){
   renderMore();
   updateHeader();
   updateFavChips();
+  renderTeishi();
   var total = parsed.items.length;
   var colN = parsed.items.filter(function(it){ return CORE.isCollector(it.condition); }).length;
   var stuckN = parsed.items.filter(function(it){ return it.price === it.akaji; }).length;
@@ -2332,6 +2420,7 @@ idbGet('fm-file').then(function(saved){
     }catch(e){ fileBytes = null; parsed = null; }
   }
   setSite(site);
+  loadTeishi();
 }).catch(function(){ setSite(site); });
 
 if('serviceWorker' in navigator){
