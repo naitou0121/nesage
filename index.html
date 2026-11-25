@@ -180,6 +180,8 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 }
 .abtn:active{transform:scale(.95);background:var(--orange-pale)}
 .abtn.undo{flex:0 0 auto;padding:0 12px;color:var(--red);border-color:#e0a8a4}
+.abtn.fav{flex:0 0 auto;min-width:40px;font-size:1.05rem;color:#b9ae98}
+.abtn.fav.on{color:#e0a100;border-color:#e0a100;background:#fff8e1}
 .abtn.icon{
   flex:0 0 40px;padding:0;font-size:1.05rem;background:#eaf6fa;border-color:#a9d4e4;color:#2494b5;
 }
@@ -389,7 +391,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.1</div>
+  <div class="ver">v30.2</div>
 </header>
 
 <div id="ptPane">
@@ -403,6 +405,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button class="chip on" id="sortChip" data-mode="new">新しい順</button>
     <button class="chip" id="stuckChip">下限張り付き</button>
     <button class="chip" id="idleChip">ほっとき</button>
+    <button class="chip" id="favChip">★お気に入り</button>
     <button class="chip" id="changedChip">変更のみ</button>
     <button class="chip" id="bulkChip">まとめて設定</button>
   </div>
@@ -427,6 +430,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <div class="chiprow">
       <button class="chip on" id="fmSortChip">新しい順</button>
       <button class="chip" id="fmOldChip">90日超</button>
+      <button class="chip" id="fmFavChip">★お気に入り</button>
       <button class="chip" id="fmChangedChip">変更のみ</button>
     </div>
     <div class="searchwrap"><input class="search" id="fmSearch" type="search" placeholder="商品名で検索" autocomplete="off"></div>
@@ -571,6 +575,35 @@ function idleOf(sku){
 }
 var onlyStuck = false;
 var onlyChanged = false;
+/* お気に入り（v30.2）：値下げを随時チェックしたい商品に★を付けて、★だけに絞り込む。
+ * プライスターはSKU、フリマルは商品IDで覚える。この端末の中（localStorage の nesage-fav）に保存。 */
+var onlyFav = false;
+var favs = (function(){
+  try{ var f = JSON.parse(localStorage.getItem('nesage-fav') || '{}'); return { pt: f.pt || {}, fm: f.fm || {} }; }
+  catch(e){ return { pt: {}, fm: {} }; }
+})();
+function saveFavs(){ try{ localStorage.setItem('nesage-fav', JSON.stringify(favs)); }catch(e){} }
+function toggleFav(kind, key, btn){
+  if(favs[kind][key]) delete favs[kind][key]; else favs[kind][key] = 1;
+  saveFavs();
+  var on = !!favs[kind][key];
+  btn.classList.toggle('on', on);
+  btn.textContent = on ? '★' : '☆';
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  updateFavChips();
+}
+// チップの件数は「いま在庫にある★」だけ数える（売れて無くなった商品は数えない）
+function updateFavChips(){
+  var n = parsed ? parsed.items.filter(function(it){ return favs.pt[it.sku]; }).length : 0;
+  $('favChip').textContent = '★お気に入り' + (n ? ' ' + n : '');
+  var m = (typeof fmParsed !== 'undefined' && fmParsed) ? fmParsed.items.filter(function(it){ return favs.fm[it.id]; }).length : 0;
+  $('fmFavChip').textContent = '★お気に入り' + (m ? ' ' + m : '');
+}
+function favBtnHTML(kind, key){
+  var on = !!favs[kind][key];
+  return '<button class="abtn fav' + (on ? ' on' : '') + '" data-act="' + (kind === 'fm' ? 'fmfav' : 'fav') +
+    '" aria-label="お気に入り" aria-pressed="' + (on ? 'true' : 'false') + '">' + (on ? '★' : '☆') + '</button>';
+}
 var query = '';
 var visibleItems = [];
 var renderedCount = 0;
@@ -811,6 +844,11 @@ $('idleChip').addEventListener('click', function(){
   this.classList.toggle('on', idleDays > 0);
   refresh();
 });
+$('favChip').addEventListener('click', function(){
+  onlyFav = !onlyFav;
+  this.classList.toggle('on', onlyFav);
+  refresh();
+});
 $('changedChip').addEventListener('click', function(){
   onlyChanged = !onlyChanged;
   this.classList.toggle('on', onlyChanged);
@@ -834,6 +872,7 @@ function computeVisible(){
       var idle = idleOf(it.sku);
       if(idle == null || idle < idleDays) return false;  // 台帳に無い商品は出さない
     }
+    if(onlyFav && !favs.pt[it.sku]) return false;
     if(onlyChanged && !(it.sku in changes)) return false;
     if(query){
       var hay = (it.title + ' ' + it.sku + ' ' + it.asin).toLowerCase();
@@ -939,6 +978,7 @@ function cardHTML(it){
       '<button class="tracebtn ' + traceCls + '" data-act="trace">' + esc(traceLabel) + ' ⇄</button>' +
     '</div>' +
     '<div class="actions">' +
+      favBtnHTML('pt', it.sku) +
       '<button class="abtn icon" data-act="keepa" aria-label="Keepaグラフ">📈</button>' +
       '<button class="abtn offers" data-act="offers">出品一覧</button>' +
       '<button class="abtn" data-act="minus100">−100</button>' +
@@ -970,6 +1010,7 @@ function refresh(){
     '<div class="empty"><span class="big">🔍</span>該当する商品がありません</div>';
   renderMore();
   updateHeader();
+  updateFavChips();
   var total = parsed.items.length;
   var colN = parsed.items.filter(function(it){ return CORE.isCollector(it.condition); }).length;
   var stuckN = parsed.items.filter(function(it){ return it.price === it.akaji; }).length;
@@ -1034,6 +1075,7 @@ $('list').addEventListener('click', function(e){
   var pv = pendingValue(it);
   var cur = (pv != null) ? pv : it[target];
 
+  if(act === 'fav'){ toggleFav('pt', it.sku, btn); return; }
   if(act === 'offers'){
     openOffers(it);
     return;
@@ -1955,7 +1997,7 @@ function fmReductionShort(t){
   return s2;
 }
 var fmChanges = {};
-var fmSort = 'new', fmOnlyOld = false, fmOnlyChanged = false, fmQuery = '';
+var fmSort = 'new', fmOnlyOld = false, fmOnlyChanged = false, fmOnlyFav = false, fmQuery = '';
 var fmVisible = [], fmRendered = 0;
 var site = localStorage.getItem('nesage-site') || 'pricetar';
 
@@ -2029,6 +2071,7 @@ function fmCloudUpdate(){
 function fmCompute(){
   if(!fmParsed) return [];
   var items = fmParsed.items.filter(function(it){
+    if(fmOnlyFav && !favs.fm[it.id]) return false;
     if(fmOnlyChanged && !fmChanges[it.id]) return false;
     if(fmOnlyOld){
       var d = daysSince(it.dateStr);
@@ -2103,6 +2146,7 @@ function fmCardHTML(it){
       redHtml +
     '</div>' +
     '<div class="actions">' +
+      favBtnHTML('fm', it.id) +
       '<button class="abtn offers" data-act="fmopen">商品ページ</button>' +
       '<button class="abtn mer" data-act="fmsearch">メルカリ</button>' +
       '<button class="abtn" data-act="fmminus100">−100</button>' +
@@ -2134,6 +2178,7 @@ function fmRefresh(){
   fmRendered = 0;
   $('fmList').innerHTML = fmVisible.length ? '' : '<div class="empty"><span class="big">🔍</span>該当する商品がありません</div>';
   fmRenderMore();
+  updateFavChips();
   var oldN = fmParsed.items.filter(function(it){ var d = daysSince(it.dateStr); return d != null && d >= 90; }).length;
   $('fmStats').textContent = '表示 ' + fmVisible.length + ' / 全' + fmParsed.items.length + '件 · 90日超' + oldN;
   updateHeader();
@@ -2170,6 +2215,7 @@ $('fmList').addEventListener('click', function(e){
   var it = fmParsed.items.find(function(x){ return x.id === card.getAttribute('data-id'); });
   if(!it) return;
   var act = btn.getAttribute('data-act');
+  if(act === 'fmfav'){ toggleFav('fm', it.id, btn); return; }
   if(act === 'fmopen'){
     // 店舗IDが分かっていれば、その商品の編集ページへ直行する
     var url = fmShopId
@@ -2237,6 +2283,9 @@ $('fmSortChip').addEventListener('click', function(){
 });
 $('fmOldChip').addEventListener('click', function(){
   fmOnlyOld = !fmOnlyOld; this.classList.toggle('on', fmOnlyOld); fmRefresh();
+});
+$('fmFavChip').addEventListener('click', function(){
+  fmOnlyFav = !fmOnlyFav; this.classList.toggle('on', fmOnlyFav); fmRefresh();
 });
 $('fmChangedChip').addEventListener('click', function(){
   fmOnlyChanged = !fmOnlyChanged; this.classList.toggle('on', fmOnlyChanged); fmRefresh();
