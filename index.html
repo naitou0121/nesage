@@ -66,6 +66,9 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .sitetab button.on{background:var(--bg);color:var(--orange-deep)}
 .sitetab button:active{background:rgba(255,255,255,.2)}
 .sitetab button.on:active{background:var(--bg)}
+.fmseg{display:flex;gap:6px;margin:16px 0 -6px;padding:4px;background:rgba(255,255,255,.25);border-radius:12px}
+.fmseg button{flex:1;min-height:38px;border:0;border-radius:9px;background:transparent;color:#fff;font-weight:800;font-size:.9rem}
+.fmseg button.on{background:#fff;color:var(--orange-deep)}
 [hidden]{display:none !important}
 .ver{position:absolute;right:6px;top:calc(env(safe-area-inset-top) + 2px);
   font-size:.58rem;color:rgba(255,255,255,.6);font-weight:700;letter-spacing:.02em}
@@ -446,9 +449,9 @@ body.lsmode{padding-bottom:0;overflow:hidden}
   <div class="sitetab" id="siteTab">
     <button data-site="pricetar" class="on">プライスター</button>
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
-    <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.18</div>
+  <div class="fmseg" id="fmSeg" hidden><button data-site="furimaru" class="on">値下げ</button><button data-site="listing">出品</button></div>
+  <div class="ver">v30.19</div>
 </header>
 
 <div id="ptPane">
@@ -2282,14 +2285,17 @@ function setSite(next){
   site = next;
   localStorage.setItem('nesage-site', site);
   document.querySelectorAll('#siteTab button').forEach(function(b){
-    b.classList.toggle('on', b.getAttribute('data-site') === site);
+    var ds = b.getAttribute('data-site');
+    b.classList.toggle('on', ds === site || (ds === 'furimaru' && site === 'listing'));   // 出品はフリマルの中（2026-11-27）
   });
+  $('fmSeg').hidden = !(site === 'furimaru' || site === 'listing');
+  document.querySelectorAll('#fmSeg button').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-site') === site); });
   $('ptPane').hidden = site !== 'pricetar';
   $('fmPane').hidden = site !== 'furimaru';
   $('lsPane').hidden = site !== 'listing';
   document.body.classList.toggle('lsmode', site === 'listing');
-  document.body.classList.toggle('fmmode', site === 'furimaru');
-  var tc = document.querySelector('meta[name="theme-color"]'); if(tc) tc.setAttribute('content', site === 'furimaru' ? '#0daa9f' : '#f39800');
+  document.body.classList.toggle('fmmode', site === 'furimaru' || site === 'listing');
+  var tc = document.querySelector('meta[name="theme-color"]'); if(tc) tc.setAttribute('content', site === 'furimaru' || site === 'listing' ? '#0daa9f' : '#f39800');
   $('importBtn').hidden = site !== 'pricetar';   // フリマルはクラウド取得のみ
   $('cloudBtn').hidden = site === 'listing';
   $('exportBtn').hidden = site === 'listing';
@@ -2299,6 +2305,9 @@ function setSite(next){
   else if(site === 'pricetar') refresh();
   window.scrollTo(0, 0);
 }
+$('fmSeg').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-site]'); if(b) setSite(b.getAttribute('data-site'));
+});
 $('siteTab').addEventListener('click', function(e){
   var b = e.target.closest('button');
   if(b) setSite(b.getAttribute('data-site'));
