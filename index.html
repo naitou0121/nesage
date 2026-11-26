@@ -440,7 +440,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
   <div class="hrow">
     <h1>値下げスター</h1>
     <button class="hbtn" id="cloudBtn">☁️ 更新</button>
-    <button class="hbtn" id="importBtn">CSV読込</button>
+    <button class="hbtn" id="importBtn" hidden>CSV読込</button><!-- 使わない（2026-11-27 納豆さん「csv読み込み使わない消して」）。取り込みは ☁️ 更新だけ -->
     <button class="hbtn" id="exportBtn" disabled>反映<span class="badge" id="chgBadge" hidden>0</span></button>
   </div>
   <div class="filemeta" id="fileMeta"></div>
@@ -450,7 +450,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="pricetar" class="on">プライスター</button>
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
   </div>
-  <div class="ver">v30.21</div>
+  <div class="ver">v30.22</div>
 </header>
 <!-- フリマルの中の「値下げ｜出品」。ヘッダーの外に置いて、プライスターの「すべて｜コレクター｜中古」と同じ段・同じ形にする（2026-11-27 納豆さん「切り替えると段が変わる」） -->
 <div class="segwrap" id="fmSeg" hidden><div class="seg"><button data-site="furimaru" class="on">値下げ</button><button data-site="listing">出品</button></div></div>
@@ -479,10 +479,8 @@ body.lsmode{padding-bottom:0;overflow:hidden}
 <div id="list">
   <div class="empty" id="emptyMsg">
     <span class="big">📦</span>
-    プライスターの<b>「CSVで一括変更」→ダウンロード</b>した<br>
-    editUploadProduct_FBA.csv を読み込んでください。<br><br>
-    右上の「CSV読込」から選択できます。<br>
-    データはこの端末の中だけに保存されます。
+    プライスターの商品データがまだありません。<br>
+    右上の「<b>☁️ 更新</b>」を押すと取り込めます。
   </div>
 </div>
 <div id="moreSentinel"></div>
@@ -2297,7 +2295,7 @@ function setSite(next){
   document.body.classList.toggle('lsmode', site === 'listing');
   document.body.classList.toggle('fmmode', site === 'furimaru' || site === 'listing');
   var tc = document.querySelector('meta[name="theme-color"]'); if(tc) tc.setAttribute('content', site === 'furimaru' || site === 'listing' ? '#0daa9f' : '#f39800');
-  $('importBtn').hidden = site !== 'pricetar';   // フリマルはクラウド取得のみ
+  $('importBtn').hidden = true;   // CSV読込は使わない（2026-11-27）
   $('cloudBtn').hidden = site === 'listing';
   $('exportBtn').hidden = site === 'listing';
   updateHeader();
