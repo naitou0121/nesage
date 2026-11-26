@@ -86,6 +86,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 .lsbtn:active{transform:scale(.98)}
 .lsbtn.main{background:var(--pink);color:#fff;min-height:52px;font-size:1rem;margin-top:20px}
 .lsbtn.sub{border-color:var(--line);color:var(--text2)}
+.lsnote{margin-top:6px;font-size:.82rem;color:var(--text2);line-height:1.5}
 .lsbtn.warn{border-color:#e0a8a4;color:var(--red)}
 .lsbtn:disabled{opacity:.45}
 .photogrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
@@ -156,7 +157,7 @@ html:not(.embed) #lsOpenStep2{display:none}
 <header>
   <div class="hrow">
     <h1>🛍️ フリマル出品</h1>
-    <div class="ver">v10</div>
+    <div class="ver">v11</div>
   </div>
   <div class="qbar" id="lsQueueBar" hidden></div>
 </header>
@@ -192,6 +193,8 @@ html:not(.embed) #lsOpenStep2{display:none}
     <div class="lssec">
       <div class="lslabel">商品名 <span class="lsreq">必須</span></div>
       <textarea class="lsinput" id="lsName" rows="2" placeholder="例：BLACK TORCH ブラックトーチ (1-5巻) 全5巻セット"></textarea>
+      <button class="lsbtn sub" id="lsReadName" style="margin-top:8px">📷 写真から商品名を読む</button>
+      <div class="lsnote" id="lsReadNote" hidden></div>
     </div>
 
     <div class="lssec">
@@ -551,6 +554,62 @@ function lsProcessImage(file){
   });
 }
 
+/* 写真から商品名を読む（2026-11-27）。読む用だけ長辺1568pxで別に作る（保存はしない） */
+function lsHiRes(file){
+  return new Promise(function(resolve, reject){
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function(){
+      var sc = Math.min(1, 1568 / Math.max(img.width, img.height));
+      var cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url); resolve(cv.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('img')); };
+    img.src = url;
+  });
+}
+var lsReading = false;
+function lsReadName(images){
+  if(lsReading || !images.length) return;
+  var pass = localStorage.getItem(LS_PASS);
+  if(!pass){ showGate(); return; }
+  lsReading = true;
+  var btn = $('lsReadName'), note = $('lsReadNote');
+  btn.disabled = true; btn.textContent = '📷 写真を読んでいます…';
+  note.hidden = true;
+  function post(o){
+    return fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ pass: pass }, o)) }).then(function(r){ return r.json(); });
+  }
+  var t0 = Date.now();
+  // 読むのは Mac mini のサブスクの Claude。預けて、できるまで2秒おきに聞く（最大3分）
+  post({ op: 'spineTitle', images: images.slice(0, 6) })
+    .then(function(res){
+      if(res.error) throw new Error(res.error);
+      return new Promise(function(resolve, reject){
+        (function poll(){
+          if(Date.now() - t0 > 180000) return reject(new Error('時間がかかりすぎています'));
+          btn.textContent = '📷 写真を読んでいます…' + Math.round((Date.now() - t0) / 1000) + '秒';
+          post({ op: 'spineGet', id: res.id }).then(function(g){
+            if(g.error && !g.done) return reject(new Error(g.error));
+            if(g.done) return resolve(g);
+            setTimeout(poll, 2000);
+          }).catch(function(){ setTimeout(poll, 3000); });
+        })();
+      });
+    })
+    .then(function(res){
+      if(res.error) throw new Error(res.error);
+      if(!res.title){ note.textContent = '作品名が読めませんでした' + (res.note ? '（' + res.note + '）' : ''); note.hidden = false; return; }
+      $('lsName').value = res.title; lsDraft.name = res.title; lsSave();
+      note.textContent = res.note ? '⚠️ ' + res.note : '✅ 読み取りました。違う所だけ直してください';
+      note.hidden = false;
+    })
+    .catch(function(e){ note.textContent = '読めませんでした：' + e.message; note.hidden = false; })
+    .then(function(){ lsReading = false; btn.disabled = false; btn.textContent = '📷 写真から商品名を読む'; });
+}
+
 function lsRenderPhotos(){
   $('lsPhotos').innerHTML = lsDraft.photos.map(function(src, i){
     return '<div class="pslot' + (i === 0 ? ' first' : '') + '">' +
@@ -572,6 +631,9 @@ $('lsFileInput').addEventListener('change', function(){
     files = files.slice(0, Math.max(0, 10 - lsDraft.photos.length));
   }
   toast(files.length + '枚を読み込んでいます…');
+  if(!$('lsName').value.trim() && files.length){
+    Promise.all(files.slice(0, 6).map(lsHiRes)).then(lsReadName).catch(function(){});
+  }
   Promise.all(files.map(lsProcessImage))
     .then(function(list){
       lsDraft.photos = lsDraft.photos.concat(list);
@@ -588,6 +650,10 @@ $('lsPhotos').addEventListener('click', function(e){
 });
 
 $('lsName').addEventListener('input', function(){ lsDraft.name = this.value; lsSave(); });
+$('lsReadName').addEventListener('click', function(){
+  if(!lsDraft.photos.length){ toast('先に写真を追加してください'); return; }
+  lsReadName(lsDraft.photos);
+});
 $('lsPrice').addEventListener('input', function(){ lsDraft.price = this.value; lsSave(); });
 $('lsAkaji').addEventListener('input', function(){ lsDraft.akaji = this.value; lsSave(); });
 $('lsDesc').addEventListener('input', function(){ lsDraft.desc = this.value; lsSave(); });
