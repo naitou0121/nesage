@@ -141,6 +141,8 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .teishibox details{margin-top:8px}
 .teishibox .te{flex-direction:column}
 .teishibox .te .tt{white-space:normal}
+.teishibox .tthumb{float:left;width:56px;height:76px;object-fit:contain;margin:2px 10px 4px 0;border-radius:4px;background:#fff;border:1px solid var(--line)}
+.teishibox .tin{clear:both}
 .teishibox .tmeta{font-size:.68rem;color:var(--text2)}
 .teishibox .tname{font-size:.95rem;font-weight:800;color:var(--text);line-height:1.4;margin:2px 0}
 .teishibox .tin{display:flex;gap:6px;align-items:flex-end;margin-top:6px;flex-wrap:wrap}
@@ -411,7 +413,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.6</div>
+  <div class="ver">v30.7</div>
 </header>
 
 <div id="ptPane">
@@ -672,7 +674,7 @@ function renderTeishi(){
   // 値段を直せる行（2026-11-27）：出品価格・赤字・高値を入れて、この行だけプライスターへ送る。空の欄は変えない
   function erow(it){
     var ph = function(v){ return v != null ? String(v) : ''; };
-    return '<div class="trow te" data-sku="' + esc(it.sku) + '"><div class="tt"><div class="tmeta">' + esc(teishiMD(it.firstSeen)) + '〜 止まっている・' + esc(TEISHI_WHERE[it.where] || '') + '</div><div class="tname">' + esc(it.title || it.sku) + '</div>' +
+    return '<div class="trow te" data-sku="' + esc(it.sku) + '"><div class="tt">' + (it.asin ? '<img class="tthumb" src="' + thumbURL(it.asin) + '" loading="lazy" alt="" onerror="this.remove()">' : '') + '<div class="tmeta">' + esc(teishiMD(it.firstSeen)) + '〜 止まっている・' + esc(TEISHI_WHERE[it.where] || '') + '</div><div class="tname">' + esc(it.title || it.sku) + '</div>' +
       '<div class="tnote">今 ' + (it.price != null ? yen(it.price) : '—') + (it.akaji != null ? '・赤字 ' + yen(it.akaji) : '') + (it.number != null ? '・数量 ' + it.number : '') + '</div>' +
       '<div class="tin"><label>出品価格<input inputmode="numeric" data-f="price" placeholder="' + ph(it.price) + '"></label>' +
       '<label>赤字<input inputmode="numeric" data-f="akaji" placeholder="' + ph(it.akaji) + '"></label>' +
