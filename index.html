@@ -162,6 +162,16 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .teishibox .tbulk button{flex:1;min-height:40px;border-radius:8px;border:1px solid var(--line);background:#fff;font-weight:800;font-size:.8rem}
 .teishibox .tbulk .tdel{border-color:#f0b3ae}
 .teishibox .tgone{opacity:.35}
+#tbusy{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:200;background:#3d2f22;color:#fff;border-radius:14px;padding:12px 14px;font-size:.9rem;display:none;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+#tbusy.on{display:block}
+#tbusy.ok{background:#1f7a3f}
+#tbusy.ng{background:#b3261e}
+#tbusy b{font-weight:800}
+#tbusy .tsec{float:right;font-variant-numeric:tabular-nums;opacity:.85}
+#tbusy .tspin{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:tspin .8s linear infinite}
+@keyframes tspin{to{transform:rotate(360deg)}}
+#tbusy .tbar{height:4px;background:rgba(255,255,255,.2);border-radius:2px;margin-top:8px;overflow:hidden}
+#tbusy .tbar i{display:block;height:100%;background:#f5a623;transition:width .5s}
 .teishibox summary{font-weight:800;cursor:pointer}
 .cdate{font-size:.7rem;color:var(--text2);margin-left:auto}
 .cdate .days{font-weight:800}
@@ -424,7 +434,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.10</div>
+  <div class="ver">v30.11</div>
 </header>
 
 <div id="ptPane">
@@ -735,6 +745,22 @@ function renderTeishi(){
   box.innerHTML = h;
   box.hidden = false;
 }
+// 送っている間は画面の下に帯を出して、秒を数える（2026-11-27 納豆さん「削除してる間動いてるのかわからない」）
+var tbusyTimer = null;
+function teishiBusy(text){
+  var el = document.getElementById('tbusy');
+  if(!el){ el = document.createElement('div'); el.id = 'tbusy'; document.body.appendChild(el); }
+  clearInterval(tbusyTimer);
+  var t0 = Date.now();
+  var draw = function(){ var sec = Math.floor((Date.now() - t0) / 1000); el.innerHTML = '<span class="tspin"></span><b>' + esc(text) + '</b><span class="tsec">' + sec + '秒</span><div class="tbar"><i style="width:' + Math.min(95, sec * 3) + '%"></i></div>'; };
+  draw(); el.className = 'on'; tbusyTimer = setInterval(draw, 500);
+}
+function teishiDone(text, ok){
+  clearInterval(tbusyTimer);
+  var el = document.getElementById('tbusy'); if(!el) return;
+  el.innerHTML = '<b>' + esc(text) + '</b>'; el.className = 'on ' + (ok ? 'ok' : 'ng');
+  setTimeout(function(){ el.className = ''; }, ok ? 3500 : 6000);
+}
 function teishiSend(rowEl){
   var sku = rowEl.getAttribute('data-sku'), c = {}, bad = '';
   rowEl.querySelectorAll('input[data-f]').forEach(function(inp){
@@ -746,7 +772,7 @@ function teishiSend(rowEl){
   if(bad){ res.textContent = bad + ' に数字を入れてください'; return; }
   if(!Object.keys(c).length){ res.textContent = '値段を入れてください'; return; }
   var pass = localStorage.getItem(LS_PASS);
-  var btn = rowEl.querySelector('.tsend'); btn.disabled = true; res.textContent = '送っています…（30秒ほど）';
+  var btn = rowEl.querySelector('.tsend'); btn.disabled = true; res.textContent = '送っています…（30秒ほど）'; teishiBusy('値段をプライスターに送っています');
   var ch = {}; ch[sku] = c;
   fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass, teishi: true, changes: ch }) })
     .then(function(r){ return r.json(); })
@@ -754,8 +780,9 @@ function teishiSend(rowEl){
       btn.disabled = false;
       var ok = j && j.ok && j.applied > 0 && !((j.errorCount || 0) + (j.extra || []).reduce(function(n, x){ return n + (x.errorCount || 0); }, 0));
       res.textContent = ok ? '✅ プライスターに書き込みました。Amazonに届くまで少しかかります' : '❌ ' + ((j && (j.error || (j.conflicts && j.conflicts[0] && j.conflicts[0].reason))) || '書き込めませんでした');
+      teishiDone(res.textContent, ok);
     })
-    .catch(function(){ btn.disabled = false; res.textContent = '❌ 通信できませんでした。もう一度押してください'; });
+    .catch(function(){ btn.disabled = false; res.textContent = '❌ 通信できませんでした。もう一度押してください'; teishiDone(res.textContent, false); });
 }
 // 出品の削除（プライスターCSVの add-delete に x）。元に戻せないので必ず確認を出す。FBA は削除すると自動で返送がかかる（納豆さんのアカウントの設定）
 function teishiDelete(skus, resEl, btn){
@@ -766,7 +793,7 @@ function teishiDelete(skus, resEl, btn){
   if(!confirm(msg)) return;
   var pass = localStorage.getItem(LS_PASS), ch = {};
   skus.forEach(function(k){ ch[k] = { del: true }; });
-  if(btn) btn.disabled = true; resEl.textContent = '削除を送っています…（30秒ほど）';
+  if(btn) btn.disabled = true; resEl.textContent = '削除を送っています…（30秒ほど）'; teishiBusy(skus.length + '件を削除しています');
   fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass, teishi: true, changes: ch }) })
     .then(function(r){ return r.json(); })
     .then(function(j){
@@ -776,8 +803,9 @@ function teishiDelete(skus, resEl, btn){
         resEl.textContent = '✅ ' + j.applied + '件の削除をプライスターに送りました' + (j.missing && j.missing.length ? '（見つからなかった物 ' + j.missing.length + '件）' : '');
         skus.forEach(function(k){ var el = document.querySelector('.te[data-sku="' + k.replace(/"/g, '') + '"]'); if(el) el.classList.add('tgone'); });
       } else resEl.textContent = '❌ ' + ((j && j.error) || ('エラー ' + errs + '件')) ;
+      teishiDone(resEl.textContent, resEl.textContent.charAt(0) === '✅');
     })
-    .catch(function(){ if(btn) btn.disabled = false; resEl.textContent = '❌ 通信できませんでした。もう一度押してください'; });
+    .catch(function(){ if(btn) btn.disabled = false; resEl.textContent = '❌ 通信できませんでした。もう一度押してください'; teishiDone(resEl.textContent, false); });
 }
 document.addEventListener('click', function(e){
   var t = e.target.closest && e.target.closest('[data-act]'); if(!t) return;
