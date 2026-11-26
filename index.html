@@ -151,6 +151,17 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .teishibox .tsend{flex:0 0 auto;min-height:40px;padding:0 16px;border-radius:8px;border:0;background:var(--orange);color:#fff;font-weight:800}
 .teishibox .tsend:disabled{opacity:.5}
 .teishibox .tres{font-size:.74rem;margin-top:4px;color:var(--text2)}
+.teishibox .ttabs{display:flex;gap:6px;margin-top:10px}
+.teishibox .ttabs button{flex:1;min-height:40px;border-radius:20px;border:1px solid var(--line);background:#fff;font-weight:800;font-size:.86rem;color:var(--text)}
+.teishibox .ttabs button.on{background:var(--orange);border-color:var(--orange);color:#fff}
+.teishibox .tdelrow{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px}
+.teishibox .tchk{display:flex;align-items:center;gap:6px;font-size:.74rem;color:var(--text2)}
+.teishibox .tchk input{width:20px;height:20px}
+.teishibox .tdel{min-height:34px;padding:0 12px;border-radius:8px;border:1px solid #f0b3ae;background:#fff;color:#b3261e;font-weight:800;font-size:.78rem}
+.teishibox .tbulk{display:flex;gap:8px;margin-top:10px}
+.teishibox .tbulk button{flex:1;min-height:40px;border-radius:8px;border:1px solid var(--line);background:#fff;font-weight:800;font-size:.8rem}
+.teishibox .tbulk .tdel{border-color:#f0b3ae}
+.teishibox .tgone{opacity:.35}
 .teishibox summary{font-weight:800;cursor:pointer}
 .cdate{font-size:.7rem;color:var(--text2);margin-left:auto}
 .cdate .days{font-weight:800}
@@ -413,7 +424,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.9</div>
+  <div class="ver">v30.10</div>
 </header>
 
 <div id="ptPane">
@@ -626,6 +637,7 @@ function updateFavChips(){
 /* 出品停止（v30.4）：Amazon の「価格の誤設定」メールで止まった商品。毎朝 Mac mini が拾って Worker に置いた一覧を読むだけ。
  * 値段と返送を決めるのは納豆さん。アプリは「どういう状況か」を出すところまで（値段は入れない・返送の手続きはしない）。 */
 var onlyTeishi = false;
+var teishiTab = 'fba';   // 出品停止の箱：FBA／自己発送で分けて見る（2026-11-27 納豆さん「分かれて見れる様に」）
 var teishi = (function(){ try{ return JSON.parse(localStorage.getItem('nesage-teishi') || 'null'); }catch(e){ return null; } })();
 var teishiMap = {};
 function teishiIndex(){
@@ -691,27 +703,34 @@ function renderTeishi(){
       '<div class="tin"><label>出品価格<input inputmode="numeric" data-f="price" placeholder="' + ph(it.price) + '"></label>' +
       '<label>赤字<input inputmode="numeric" data-f="akaji" placeholder="' + ph(it.akaji) + '"></label>' +
       '<label>高値<input inputmode="numeric" data-f="takane"></label>' +
-      '<button class="tsend" data-act="tsend">送る</button></div><div class="tres"></div></div></div>';
+      '<button class="tsend" data-act="tsend">送る</button></div>' +
+      '<div class="tdelrow">' + (TEISHI_WHERE[it.where] === '自己発送' ? '<label class="tchk"><input type="checkbox" data-sel="1">まとめて削除に入れる</label>' : '<span></span>') +
+      '<button class="tdel" data-act="tdel">この出品を削除</button></div><div class="tres"></div></div></div>';
   }
   var age = teishiAgeDays();
   var when = teishi.at ? new Date(teishi.at).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+  var fbaAll = items.filter(function(it){ return TEISHI_WHERE[it.where] === 'FBA'; });
+  var selfAll = items.filter(function(it){ return TEISHI_WHERE[it.where] !== 'FBA'; });
   var h = '<h3>Amazonで出品が止まっている商品 ' + items.length + '件</h3>' +
-    '<div class="tnote">' + (age != null && age >= 2 ? '⚠️ ' + age + '日前の一覧です（毎朝の拾いが止まっているかも）。' : '') + esc(when) + ' に拾った分。値段と返送は納豆さんが決めます。</div>';
-  h += '<div class="tgrp">FBA・在庫あり ' + fba.length + '件（値下げするか、返送するか）</div>';
-  var fbaOut = fba.filter(function(it){ return !inList[it.sku]; });
-  if(fba.length - fbaOut.length) h += '<div class="tnote">下のカード ' + (fba.length - fbaOut.length) + '件で値段を変えられます。返送はセラーセントラルで。</div>';
-  h += fbaOut.map(erow).join('');
-  if(fbaZero.length){
-    h += '<div class="tgrp">FBA・止まっている（最近の出品・プライスターでは数量0）' + fbaZero.length + '件</div>' +
-      '<div class="tnote">半年以内に出品した物です。売れて無くなった物も混ざります。倉庫に残っているかはセラーセントラルの在庫で確かめられます。値段を直すならここから送れます。</div>' + fbaZero.map(erow).join('');
-  }
-  if(self.length){
-    h += '<div class="tgrp">自己発送・在庫あり ' + self.length + '件</div>' +
-      '<div class="tnote">値段を入れて「送る」を押すと、その1件だけプライスターに書き込みます（空の欄は変えません）。</div>' + self.map(erow).join('');
-  }
-  if(zero.length){
-    h += '<details><summary>古い出品・数量0 ' + zero.length + '件（売れた後の可能性が高い）</summary>' +
-      '<div class="tnote">半年より前に出品したFBAの物（売れた後に、その時の値段で止められていることが多い）と、自己発送で数量0の物、居場所が分からない物です。</div>' + zero.map(function(it){ return it.where === 'none' ? row(it) : erow(it); }).join('') + '</details>';
+    '<div class="tnote">' + (age != null && age >= 2 ? '⚠️ ' + age + '日前の一覧です（毎朝の拾いが止まっているかも）。' : '') + esc(when) + ' に拾った分。値段・削除・返送は納豆さんが決めます。</div>' +
+    '<div class="ttabs"><button data-act="ttab" data-tab="fba" class="' + (teishiTab === 'fba' ? 'on' : '') + '">FBA ' + fbaAll.length + '</button>' +
+    '<button data-act="ttab" data-tab="self" class="' + (teishiTab === 'self' ? 'on' : '') + '">自己発送 ' + selfAll.length + '</button></div>';
+  if(teishiTab === 'fba'){
+    var fbaOut = fba.filter(function(it){ return !inList[it.sku]; });
+    h += '<div class="tgrp">在庫あり ' + fba.length + '件</div>';
+    if(fba.length - fbaOut.length) h += '<div class="tnote">下のカード ' + (fba.length - fbaOut.length) + '件で値段を変えられます。</div>';
+    h += fbaOut.map(erow).join('');
+    h += '<div class="tgrp">止まっている・最近の出品（プライスターでは数量0）' + fbaZero.length + '件</div>' +
+      '<div class="tnote">半年以内に出品した物。売れて無くなった物も混ざります。削除すると自動で返送がかかります（返送の手数料がかかります）。</div>' + fbaZero.map(erow).join('');
+    if(fbaOld.length) h += '<details><summary>古い出品 ' + fbaOld.length + '件（売れた後の可能性が高い）</summary>' +
+      '<div class="tnote">半年より前に出品した物。売れた後に、その時の値段で止められていることが多いです。</div>' + fbaOld.map(erow).join('') + '</details>';
+  } else {
+    var selfZero = selfAll.filter(function(it){ return !(it.number > 0) && it.where !== 'none'; });
+    var none = selfAll.filter(function(it){ return it.where === 'none'; });
+    h += '<div class="tbulk"><button data-act="tselall">全部チェック</button><button class="tdel" data-act="tdelsel">チェックした物をまとめて削除</button></div>';
+    h += '<div class="tgrp">在庫あり ' + self.length + '件</div>' + self.map(erow).join('');
+    h += '<div class="tgrp">数量0 ' + selfZero.length + '件（売れた・出し直し済みなど）</div>' + selfZero.map(erow).join('');
+    if(none.length) h += '<details><summary>居場所が分からない ' + none.length + '件</summary>' + none.map(row).join('') + '</details>';
   }
   box.innerHTML = h;
   box.hidden = false;
@@ -738,9 +757,41 @@ function teishiSend(rowEl){
     })
     .catch(function(){ btn.disabled = false; res.textContent = '❌ 通信できませんでした。もう一度押してください'; });
 }
+// 出品の削除（プライスターCSVの add-delete に x）。元に戻せないので必ず確認を出す。FBA は削除すると自動で返送がかかる（納豆さんのアカウントの設定）
+function teishiDelete(skus, resEl, btn){
+  var names = skus.map(function(k){ var it = teishiMap[k]; return '・' + ((it && it.title) || k); });
+  var hasFba = skus.some(function(k){ var it = teishiMap[k]; return it && TEISHI_WHERE[it.where] === 'FBA'; });
+  var msg = skus.length + '件の出品を削除します。元に戻せません。\n\n' + names.slice(0, 15).join('\n') + (names.length > 15 ? '\n…ほか' + (names.length - 15) + '件' : '') +
+    (hasFba ? '\n\nFBAの物は、削除すると自動で返送がかかります（返送の手数料がかかります）。' : '') + '\n\n削除しますか？';
+  if(!confirm(msg)) return;
+  var pass = localStorage.getItem(LS_PASS), ch = {};
+  skus.forEach(function(k){ ch[k] = { del: true }; });
+  if(btn) btn.disabled = true; resEl.textContent = '削除を送っています…（30秒ほど）';
+  fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass, teishi: true, changes: ch }) })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(btn) btn.disabled = false;
+      var errs = (j && ((j.errorCount || 0) + (j.extra || []).reduce(function(n, x){ return n + (x.errorCount || 0); }, 0))) || 0;
+      if(j && j.ok && j.applied > 0 && !errs){
+        resEl.textContent = '✅ ' + j.applied + '件の削除をプライスターに送りました' + (j.missing && j.missing.length ? '（見つからなかった物 ' + j.missing.length + '件）' : '');
+        skus.forEach(function(k){ var el = document.querySelector('.te[data-sku="' + k.replace(/"/g, '') + '"]'); if(el) el.classList.add('tgone'); });
+      } else resEl.textContent = '❌ ' + ((j && j.error) || ('エラー ' + errs + '件')) ;
+    })
+    .catch(function(){ if(btn) btn.disabled = false; resEl.textContent = '❌ 通信できませんでした。もう一度押してください'; });
+}
 document.addEventListener('click', function(e){
-  var b = e.target.closest && e.target.closest('[data-act="tsend"]');
-  if(b) teishiSend(b.closest('.te'));
+  var t = e.target.closest && e.target.closest('[data-act]'); if(!t) return;
+  var act = t.getAttribute('data-act');
+  if(act === 'tsend') teishiSend(t.closest('.te'));
+  else if(act === 'tdel'){ var r = t.closest('.te'); teishiDelete([r.getAttribute('data-sku')], r.querySelector('.tres'), t); }
+  else if(act === 'ttab'){ teishiTab = t.getAttribute('data-tab'); renderTeishi(); }
+  else if(act === 'tselall'){ var cs = document.querySelectorAll('#teishiBox input[data-sel]'); var all = [].every.call(cs, function(c){ return c.checked; }); cs.forEach(function(c){ c.checked = !all; }); }
+  else if(act === 'tdelsel'){
+    var skus = [].map.call(document.querySelectorAll('#teishiBox input[data-sel]:checked'), function(c){ return c.closest('.te').getAttribute('data-sku'); });
+    var res = document.querySelector('#teishiBox .tbulkres') || (function(){ var d = document.createElement('div'); d.className = 'tres tbulkres'; t.parentNode.after(d); return d; })();
+    if(!skus.length){ res.textContent = '削除する物にチェックを入れてください'; return; }
+    teishiDelete(skus, res, t);
+  }
 });
 function favBtnHTML(kind, key){
   var on = !!favs[kind][key];
