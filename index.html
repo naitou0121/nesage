@@ -434,7 +434,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.12</div>
+  <div class="ver">v30.13</div>
 </header>
 
 <div id="ptPane">
@@ -779,7 +779,9 @@ function teishiSend(rowEl){
     .then(function(j){
       btn.disabled = false;
       var ok = j && j.ok && j.applied > 0 && !((j.errorCount || 0) + (j.extra || []).reduce(function(n, x){ return n + (x.errorCount || 0); }, 0));
-      res.textContent = ok ? '✅ プライスターに書き込みました。Amazonに届くまで少しかかります' : '❌ ' + ((j && (j.error || (j.conflicts && j.conflicts[0] && j.conflicts[0].reason))) || '書き込めませんでした');
+      var why = (j && (j.error || (j.conflicts && j.conflicts[0] && j.conflicts[0].reason))) || '書き込めませんでした';
+      if(/見つかりません/.test(why)) why = 'プライスターにもう無い商品です（消し済みか、売れて無くなった物）。値段は直せません。「この出品を削除」を押すと一覧から外せます';
+      res.textContent = ok ? '✅ プライスターに書き込みました。Amazonに届くまで少しかかります' : '❌ ' + why;
       teishiDone(res.textContent, ok);
     })
     .catch(function(){ btn.disabled = false; res.textContent = '❌ 通信できませんでした。もう一度押してください'; teishiDone(res.textContent, false); });
@@ -804,6 +806,13 @@ function teishiDelete(skus, resEl, btn){
         // 消した物は一覧からすぐ外す（サーバー側でも外れている・2026-11-27）
         if(teishi && teishi.items){ teishi.items = teishi.items.filter(function(it){ return skus.indexOf(it.sku) < 0; }); try{ localStorage.setItem('nesage-teishi', JSON.stringify(teishi)); }catch(e){} teishiIndex(); }
         setTimeout(renderTeishi, 1200);
+      } else if(j && j.missing && j.missing.length && /見つかりません/.test(j.error || '')){
+        // プライスターにもう無い（消し済み・売れて無くなった）。一覧から外す
+        var miss = j.missing.slice();
+        fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass, op: 'teishiHide', skus: miss }) }).catch(function(){});
+        if(teishi && teishi.items){ teishi.items = teishi.items.filter(function(it){ return miss.indexOf(it.sku) < 0; }); try{ localStorage.setItem('nesage-teishi', JSON.stringify(teishi)); }catch(e){} teishiIndex(); }
+        resEl.textContent = '✅ プライスターにはもう無い商品でした（消し済みか、売れて無くなった物）。一覧から外しました';
+        setTimeout(renderTeishi, 1500);
       } else resEl.textContent = '❌ ' + ((j && j.error) || ('エラー ' + errs + '件')) ;
       teishiDone(resEl.textContent, resEl.textContent.charAt(0) === '✅');
     })
