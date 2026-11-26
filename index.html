@@ -413,7 +413,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.8</div>
+  <div class="ver">v30.9</div>
 </header>
 
 <div id="ptPane">
@@ -648,6 +648,14 @@ function loadTeishi(){
     .catch(function(){});   // 取れなくても値下げの作業は止めない（前に読んだ一覧のまま出す）
 }
 var TEISHI_WHERE = { fba_active: 'FBA', fba_inactive: 'FBA', self_active: '自己発送', self_inactive: '自己発送', none: '居場所不明' };
+// SKU に入っている出品した日（pr_…_YYYYMMDD_… か nYYYYMMDD…）。分からなければ null（2026-11-27）
+function teishiListed(sku){
+  var m = /_(20\d{2})(\d{2})(\d{2})_/.exec(sku || '') || /^n(20\d{2})(\d{2})(\d{2})/.exec(sku || '');
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+var TEISHI_OLD_DAYS = 180;   // これより前に出品した物は「古い出品（売れた後の可能性が高い）」に畳む（にしきの仮置き・2026-11-27）
+function teishiOld(it){ var d = teishiListed(it.sku); return !!d && (Date.now() - d) / 86400000 > TEISHI_OLD_DAYS; }
+function teishiListedText(it){ var d = teishiListed(it.sku); return d ? '出品 ' + d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate() + '・' : ''; }
 function teishiMD(s){ return s ? (+s.slice(5, 7)) + '/' + (+s.slice(8, 10)) : ''; }
 // 一覧が何日前のものか（毎朝の拾いが止まると古いまま出るので、常に見せる）
 function teishiAgeDays(){
@@ -666,9 +674,11 @@ function renderTeishi(){
   if(parsed) parsed.items.forEach(function(it){ if(teishiMap[it.sku]) inList[it.sku] = 1; });
   // FBA で止まった商品は、プライスターでは数量0に見えることが多い（倉庫に残っていても）。なので FBA は数量に関係なく上に出す（2026-11-27 納豆さん「FBA出品で止まってるやつはでないの？」）
   var fba = act.filter(function(it){ return TEISHI_WHERE[it.where] === 'FBA'; });
-  var fbaZero = items.filter(function(it){ return !(it.number > 0) && TEISHI_WHERE[it.where] === 'FBA'; });
+  var fbaZeroAll = items.filter(function(it){ return !(it.number > 0) && TEISHI_WHERE[it.where] === 'FBA'; });
+  var fbaZero = fbaZeroAll.filter(function(it){ return !teishiOld(it); });
+  var fbaOld = fbaZeroAll.filter(function(it){ return teishiOld(it); });
   var self = act.filter(function(it){ return TEISHI_WHERE[it.where] !== 'FBA'; });
-  var zero = items.filter(function(it){ return !(it.number > 0) && TEISHI_WHERE[it.where] !== 'FBA'; });
+  var zero = fbaOld.concat(items.filter(function(it){ return !(it.number > 0) && TEISHI_WHERE[it.where] !== 'FBA'; }));
   function row(it){
     return '<div class="trow"><span class="tt">' + esc(teishiMD(it.firstSeen)) + '〜 ' + esc(TEISHI_WHERE[it.where] || '') + '　' + esc(it.title || it.sku) + '</span>' +
       '<span class="tp">' + (it.price != null ? yen(it.price) : (it.mailPrice != null ? yen(it.mailPrice) : '')) + '</span></div>';
@@ -676,7 +686,7 @@ function renderTeishi(){
   // 値段を直せる行（2026-11-27）：出品価格・赤字・高値を入れて、この行だけプライスターへ送る。空の欄は変えない
   function erow(it){
     var ph = function(v){ return v != null ? String(v) : ''; };
-    return '<div class="trow te" data-sku="' + esc(it.sku) + '"><div class="tt">' + (it.asin ? '<img class="tthumb" src="' + thumbURL(it.asin) + '" loading="lazy" alt="" onerror="this.remove()">' : '') + '<div class="tmeta">' + esc(teishiMD(it.firstSeen)) + '〜 止まっている・' + esc(TEISHI_WHERE[it.where] || '') + '</div><div class="tname">' + esc(it.title || it.sku) + '</div>' +
+    return '<div class="trow te" data-sku="' + esc(it.sku) + '"><div class="tt">' + (it.asin ? '<img class="tthumb" src="' + thumbURL(it.asin) + '" loading="lazy" alt="" onerror="this.remove()">' : '') + '<div class="tmeta">' + esc(teishiListedText(it)) + esc(teishiMD(it.firstSeen)) + '〜 止まっている・' + esc(TEISHI_WHERE[it.where] || '') + '</div><div class="tname">' + esc(it.title || it.sku) + '</div>' +
       '<div class="tnote">今 ' + (it.price != null ? yen(it.price) : '—') + (it.akaji != null ? '・赤字 ' + yen(it.akaji) : '') + (it.number != null ? '・数量 ' + it.number : '') + '</div>' +
       '<div class="tin"><label>出品価格<input inputmode="numeric" data-f="price" placeholder="' + ph(it.price) + '"></label>' +
       '<label>赤字<input inputmode="numeric" data-f="akaji" placeholder="' + ph(it.akaji) + '"></label>' +
@@ -692,16 +702,16 @@ function renderTeishi(){
   if(fba.length - fbaOut.length) h += '<div class="tnote">下のカード ' + (fba.length - fbaOut.length) + '件で値段を変えられます。返送はセラーセントラルで。</div>';
   h += fbaOut.map(erow).join('');
   if(fbaZero.length){
-    h += '<div class="tgrp">FBA・止まっている（プライスターでは数量0）' + fbaZero.length + '件</div>' +
-      '<div class="tnote">売れて無くなった物も混ざります。倉庫に残っているかはセラーセントラルの在庫で確かめられます。値段を直すならここから送れます。</div>' + fbaZero.map(erow).join('');
+    h += '<div class="tgrp">FBA・止まっている（最近の出品・プライスターでは数量0）' + fbaZero.length + '件</div>' +
+      '<div class="tnote">半年以内に出品した物です。売れて無くなった物も混ざります。倉庫に残っているかはセラーセントラルの在庫で確かめられます。値段を直すならここから送れます。</div>' + fbaZero.map(erow).join('');
   }
   if(self.length){
     h += '<div class="tgrp">自己発送・在庫あり ' + self.length + '件</div>' +
       '<div class="tnote">値段を入れて「送る」を押すと、その1件だけプライスターに書き込みます（空の欄は変えません）。</div>' + self.map(erow).join('');
   }
   if(zero.length){
-    h += '<details><summary>数量0 ' + zero.length + '件（売れた・出し直し済みなど）</summary>' +
-      '<div class="tnote">自己発送で数量0のもの（売れた・出し直し済みなど）と、居場所が分からないものです。</div>' + zero.map(function(it){ return it.where === 'none' ? row(it) : erow(it); }).join('') + '</details>';
+    h += '<details><summary>古い出品・数量0 ' + zero.length + '件（売れた後の可能性が高い）</summary>' +
+      '<div class="tnote">半年より前に出品したFBAの物（売れた後に、その時の値段で止められていることが多い）と、自己発送で数量0の物、居場所が分からない物です。</div>' + zero.map(function(it){ return it.where === 'none' ? row(it) : erow(it); }).join('') + '</details>';
   }
   box.innerHTML = h;
   box.hidden = false;
