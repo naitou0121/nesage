@@ -30,9 +30,9 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;tou
 input{font:inherit}
 
 /* ---------- ヘッダー（プライスターオレンジ） ---------- */
-/* フリマルを触っている時は色を変える（フリマルの紺・2026-11-27 納豆さん「どっちを触ってるか分かりにくい」） */
-body.fmmode{--orange:#084489;--orange-deep:#063366;--orange-pale:#e6eef8;--bg:#eef2f7}
-body.fmmode header{background:linear-gradient(180deg,#2a6db8,#084489)!important}
+/* フリマルを触っている時は色を変える（フリマルのターコイズ #0daa9f・公式サイトの色・2026-11-27 納豆さん「どっちを触ってるか分かりにくい」「イメージ色はターコイズブルー」） */
+body.fmmode{--orange:#0daa9f;--orange-deep:#08857c;--orange-pale:#e2f6f4;--bg:#eef8f7}
+body.fmmode header{background:linear-gradient(180deg,#2fc6ba,#0daa9f)!important}
 header{
   position:sticky;top:0;z-index:20;
   background:linear-gradient(180deg,#ffb340,#f39800);
@@ -448,7 +448,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.17</div>
+  <div class="ver">v30.18</div>
 </header>
 
 <div id="ptPane">
@@ -2289,7 +2289,7 @@ function setSite(next){
   $('lsPane').hidden = site !== 'listing';
   document.body.classList.toggle('lsmode', site === 'listing');
   document.body.classList.toggle('fmmode', site === 'furimaru');
-  var tc = document.querySelector('meta[name="theme-color"]'); if(tc) tc.setAttribute('content', site === 'furimaru' ? '#084489' : '#f39800');
+  var tc = document.querySelector('meta[name="theme-color"]'); if(tc) tc.setAttribute('content', site === 'furimaru' ? '#0daa9f' : '#f39800');
   $('importBtn').hidden = site !== 'pricetar';   // フリマルはクラウド取得のみ
   $('cloudBtn').hidden = site === 'listing';
   $('exportBtn').hidden = site === 'listing';
