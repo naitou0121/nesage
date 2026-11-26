@@ -413,7 +413,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.7</div>
+  <div class="ver">v30.8</div>
 </header>
 
 <div id="ptPane">
@@ -664,9 +664,11 @@ function renderTeishi(){
   if(!onlyTeishi || !items.length){ box.hidden = true; return; }
   var inList = {};
   if(parsed) parsed.items.forEach(function(it){ if(teishiMap[it.sku]) inList[it.sku] = 1; });
+  // FBA で止まった商品は、プライスターでは数量0に見えることが多い（倉庫に残っていても）。なので FBA は数量に関係なく上に出す（2026-11-27 納豆さん「FBA出品で止まってるやつはでないの？」）
   var fba = act.filter(function(it){ return TEISHI_WHERE[it.where] === 'FBA'; });
+  var fbaZero = items.filter(function(it){ return !(it.number > 0) && TEISHI_WHERE[it.where] === 'FBA'; });
   var self = act.filter(function(it){ return TEISHI_WHERE[it.where] !== 'FBA'; });
-  var zero = items.filter(function(it){ return !(it.number > 0); });
+  var zero = items.filter(function(it){ return !(it.number > 0) && TEISHI_WHERE[it.where] !== 'FBA'; });
   function row(it){
     return '<div class="trow"><span class="tt">' + esc(teishiMD(it.firstSeen)) + '〜 ' + esc(TEISHI_WHERE[it.where] || '') + '　' + esc(it.title || it.sku) + '</span>' +
       '<span class="tp">' + (it.price != null ? yen(it.price) : (it.mailPrice != null ? yen(it.mailPrice) : '')) + '</span></div>';
@@ -689,13 +691,17 @@ function renderTeishi(){
   var fbaOut = fba.filter(function(it){ return !inList[it.sku]; });
   if(fba.length - fbaOut.length) h += '<div class="tnote">下のカード ' + (fba.length - fbaOut.length) + '件で値段を変えられます。返送はセラーセントラルで。</div>';
   h += fbaOut.map(erow).join('');
+  if(fbaZero.length){
+    h += '<div class="tgrp">FBA・止まっている（プライスターでは数量0）' + fbaZero.length + '件</div>' +
+      '<div class="tnote">売れて無くなった物も混ざります。倉庫に残っているかはセラーセントラルの在庫で確かめられます。値段を直すならここから送れます。</div>' + fbaZero.map(erow).join('');
+  }
   if(self.length){
     h += '<div class="tgrp">自己発送・在庫あり ' + self.length + '件</div>' +
       '<div class="tnote">値段を入れて「送る」を押すと、その1件だけプライスターに書き込みます（空の欄は変えません）。</div>' + self.map(erow).join('');
   }
   if(zero.length){
     h += '<details><summary>数量0 ' + zero.length + '件（売れた・出し直し済みなど）</summary>' +
-      '<div class="tnote">FBAで数量0のものは、売れたのか倉庫で止まっているのかを、プライスターからは見分けられません。倉庫に残っているなら、ここで値段を直せます。</div>' + zero.map(function(it){ return it.where === 'none' ? row(it) : erow(it); }).join('') + '</details>';
+      '<div class="tnote">自己発送で数量0のもの（売れた・出し直し済みなど）と、居場所が分からないものです。</div>' + zero.map(function(it){ return it.where === 'none' ? row(it) : erow(it); }).join('') + '</details>';
   }
   box.innerHTML = h;
   box.hidden = false;
