@@ -436,7 +436,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.14</div>
+  <div class="ver">v30.15</div>
 </header>
 
 <div id="ptPane">
@@ -797,32 +797,47 @@ function teishiDelete(skus, resEl, btn){
   var msg = skus.length + '件の出品を削除します。元に戻せません。\n\n' + names.slice(0, 15).join('\n') + (names.length > 15 ? '\n…ほか' + (names.length - 15) + '件' : '') +
     (hasFba ? '\n\nFBAの物は、削除すると自動で返送がかかります（返送の手数料がかかります）。' : '') + '\n\n削除しますか？';
   if(!confirm(msg)) return;
-  var pass = localStorage.getItem(LS_PASS), ch = {};
+  var ch = {};
   skus.forEach(function(k){ ch[k] = { del: true }; });
-  if(btn) btn.disabled = true; resEl.textContent = '削除を送っています…（30秒ほど）'; teishiBusy(skus.length + '件を削除しています');
-  fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass, teishi: true, changes: ch }) })
-    .then(function(r){ return r.json(); })
-    .then(function(j){
-      if(btn) btn.disabled = false;
-      var errs = (j && ((j.errorCount || 0) + (j.extra || []).reduce(function(n, x){ return n + (x.errorCount || 0); }, 0))) || 0;
-      if(j && j.ok && j.applied > 0 && !errs){
-        resEl.textContent = '✅ ' + j.applied + '件の削除をプライスターに送りました' + (j.missing && j.missing.length ? '（見つからなかった物 ' + j.missing.length + '件）' : '');
-        // 消した物は一覧からすぐ外す（サーバー側でも外れている・2026-11-27）。プライスターに無かった物も一覧から外す
-        if(j.missing && j.missing.length) fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass, op: 'teishiHide', skus: j.missing }) }).catch(function(){});
-        if(teishi && teishi.items){ teishi.items = teishi.items.filter(function(it){ return skus.indexOf(it.sku) < 0; }); try{ localStorage.setItem('nesage-teishi', JSON.stringify(teishi)); }catch(e){} teishiIndex(); }
-        setTimeout(renderTeishi, 1200);
-      } else if(j && j.missing && j.missing.length && /見つかりません/.test(j.error || '')){
-        // プライスターにもう無い（消し済み・売れて無くなった）。一覧から外す
-        var miss = j.missing.slice();
-        fetch(APPLY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass, op: 'teishiHide', skus: miss }) }).catch(function(){});
-        if(teishi && teishi.items){ teishi.items = teishi.items.filter(function(it){ return miss.indexOf(it.sku) < 0; }); try{ localStorage.setItem('nesage-teishi', JSON.stringify(teishi)); }catch(e){} teishiIndex(); }
-        resEl.textContent = '✅ プライスターにはもう無い商品でした（消し済みか、売れて無くなった物）。一覧から外しました';
-        setTimeout(renderTeishi, 1500);
-      } else resEl.textContent = '❌ ' + ((j && j.error) || ('エラー ' + errs + '件')) ;
-      teishiDone(resEl.textContent, resEl.textContent.charAt(0) === '✅');
-    })
-    .catch(function(){ if(btn) btn.disabled = false; resEl.textContent = '❌ 通信できませんでした。もう一度押してください'; teishiDone(resEl.textContent, false); });
+  if(btn) btn.disabled = true; resEl.textContent = '削除を預けています…';
+  var id = 'td' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  teishiBusy(skus.length + '件の削除を預けています');
+  // クラウドの列に預ける＝アプリを閉じても続く（2026-11-27）。結果は開き直した時にも聞きに行く
+  jobEnqueue('pricetar', 'ptTeishi', id, { changes: ch }).then(function(){
+    try{ localStorage.setItem('nesage-teishi-job', JSON.stringify({ id: id, skus: skus, at: Date.now() })); }catch(e){}
+    resEl.textContent = '削除しています（アプリを閉じても続きます）';
+    teishiWatch(id, skus, resEl, btn);
+  }).catch(function(e){ if(btn) btn.disabled = false; resEl.textContent = '❌ 預けられませんでした：' + (e.message || '通信できませんでした'); teishiDone(resEl.textContent, false); });
 }
+function teishiWatch(id, skus, resEl, btn){
+  teishiBusy(skus.length + '件を削除しています（閉じても続きます）');
+  var t0 = Date.now();
+  var tick = function(){
+    jobStatus('pricetar', id).then(function(j){
+      if(!j || j.state === 'queued' || j.state === 'running'){
+        if(Date.now() - t0 > 6 * 60 * 1000){ teishiDone('まだ終わっていません。あとでもう一度開いてください', false); return; }
+        return setTimeout(tick, 3000);
+      }
+      try{ localStorage.removeItem('nesage-teishi-job'); }catch(e){}
+      if(btn) btn.disabled = false;
+      var r = j.result || {}, msg;
+      if(j.state === 'done' && !r.errorCount){
+        var gone = skus;
+        msg = '✅ ' + (r.applied || 0) + '件を削除しました' + (r.missing && r.missing.length ? '（プライスターにもう無かった ' + r.missing.length + '件は一覧から外しました）' : '');
+        if(teishi && teishi.items){ teishi.items = teishi.items.filter(function(it){ return gone.indexOf(it.sku) < 0; }); try{ localStorage.setItem('nesage-teishi', JSON.stringify(teishi)); }catch(e){} teishiIndex(); }
+        setTimeout(renderTeishi, 1200);
+      } else msg = '❌ ' + (j.error || ('エラー ' + (r.errorCount || 0) + '件'));
+      if(resEl) resEl.textContent = msg;
+      teishiDone(msg, msg.charAt(0) === '✅');
+    }).catch(function(){ setTimeout(tick, 5000); });
+  };
+  tick();
+}
+// 開いた時：閉じる前に預けた削除があれば、結果を聞きに行く
+setTimeout(function(){
+  var p = null; try{ p = JSON.parse(localStorage.getItem('nesage-teishi-job') || 'null'); }catch(e){}
+  if(p && p.id && Date.now() - p.at < 24 * 3600e3) teishiWatch(p.id, p.skus || [], null, null);
+}, 1500);
 document.addEventListener('click', function(e){
   var t = e.target.closest && e.target.closest('[data-act]'); if(!t) return;
   var act = t.getAttribute('data-act');
