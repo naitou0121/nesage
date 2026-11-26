@@ -141,6 +141,8 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .teishibox details{margin-top:8px}
 .teishibox .te{flex-direction:column}
 .teishibox .te .tt{white-space:normal}
+.teishibox .tmeta{font-size:.68rem;color:var(--text2)}
+.teishibox .tname{font-size:.95rem;font-weight:800;color:var(--text);line-height:1.4;margin:2px 0}
 .teishibox .tin{display:flex;gap:6px;align-items:flex-end;margin-top:6px;flex-wrap:wrap}
 .teishibox .tin label{display:flex;flex-direction:column;font-size:.68rem;color:var(--text2);flex:1;min-width:70px}
 .teishibox .tin input{font-size:16px;padding:8px;border:1px solid var(--line);border-radius:8px;width:100%;box-sizing:border-box}
@@ -409,7 +411,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.5</div>
+  <div class="ver">v30.6</div>
 </header>
 
 <div id="ptPane">
@@ -670,7 +672,7 @@ function renderTeishi(){
   // 値段を直せる行（2026-11-27）：出品価格・赤字・高値を入れて、この行だけプライスターへ送る。空の欄は変えない
   function erow(it){
     var ph = function(v){ return v != null ? String(v) : ''; };
-    return '<div class="trow te" data-sku="' + esc(it.sku) + '"><div class="tt">' + esc(teishiMD(it.firstSeen)) + '〜 ' + esc(TEISHI_WHERE[it.where] || '') + '　' + esc(it.title || it.sku) +
+    return '<div class="trow te" data-sku="' + esc(it.sku) + '"><div class="tt"><div class="tmeta">' + esc(teishiMD(it.firstSeen)) + '〜 止まっている・' + esc(TEISHI_WHERE[it.where] || '') + '</div><div class="tname">' + esc(it.title || it.sku) + '</div>' +
       '<div class="tnote">今 ' + (it.price != null ? yen(it.price) : '—') + (it.akaji != null ? '・赤字 ' + yen(it.akaji) : '') + (it.number != null ? '・数量 ' + it.number : '') + '</div>' +
       '<div class="tin"><label>出品価格<input inputmode="numeric" data-f="price" placeholder="' + ph(it.price) + '"></label>' +
       '<label>赤字<input inputmode="numeric" data-f="akaji" placeholder="' + ph(it.akaji) + '"></label>' +
