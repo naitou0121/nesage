@@ -434,7 +434,7 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
     <button data-site="listing">出品</button>
   </div>
-  <div class="ver">v30.11</div>
+  <div class="ver">v30.12</div>
 </header>
 
 <div id="ptPane">
@@ -801,7 +801,9 @@ function teishiDelete(skus, resEl, btn){
       var errs = (j && ((j.errorCount || 0) + (j.extra || []).reduce(function(n, x){ return n + (x.errorCount || 0); }, 0))) || 0;
       if(j && j.ok && j.applied > 0 && !errs){
         resEl.textContent = '✅ ' + j.applied + '件の削除をプライスターに送りました' + (j.missing && j.missing.length ? '（見つからなかった物 ' + j.missing.length + '件）' : '');
-        skus.forEach(function(k){ var el = document.querySelector('.te[data-sku="' + k.replace(/"/g, '') + '"]'); if(el) el.classList.add('tgone'); });
+        // 消した物は一覧からすぐ外す（サーバー側でも外れている・2026-11-27）
+        if(teishi && teishi.items){ teishi.items = teishi.items.filter(function(it){ return skus.indexOf(it.sku) < 0; }); try{ localStorage.setItem('nesage-teishi', JSON.stringify(teishi)); }catch(e){} teishiIndex(); }
+        setTimeout(renderTeishi, 1200);
       } else resEl.textContent = '❌ ' + ((j && j.error) || ('エラー ' + errs + '件')) ;
       teishiDone(resEl.textContent, resEl.textContent.charAt(0) === '✅');
     })
