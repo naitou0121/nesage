@@ -39,7 +39,7 @@ header{
   border-bottom:2px solid var(--orange-deep);
   padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;
 }
-.hrow{display:flex;align-items:center;gap:7px}
+.hrow{display:flex;align-items:center;gap:7px;min-height:36px}   /* ボタンが無い画面でも高さを揃える（2026-11-27） */
 h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;text-shadow:0 1px 2px rgba(140,70,0,.35)}
 .hbtn{
   min-height:36px;padding:6px 11px;border-radius:999px;font-size:.85rem;font-weight:700;
@@ -66,11 +66,11 @@ h1{font-size:1.04rem;font-weight:800;letter-spacing:-0.01em;flex:1;color:#fff;te
 .sitetab button.on{background:var(--bg);color:var(--orange-deep)}
 .sitetab button:active{background:rgba(255,255,255,.2)}
 .sitetab button.on:active{background:var(--bg)}
-.fmseg{display:flex;gap:6px;margin:16px 0 -6px;padding:4px;background:rgba(255,255,255,.25);border-radius:12px}
-.fmseg button{flex:1;min-height:38px;border:0;border-radius:9px;background:transparent;color:#fff;font-weight:800;font-size:.9rem}
-.fmseg button.on{background:#fff;color:var(--orange-deep)}
+.segwrap{padding:10px 12px 0}
+body.fmmode .seg{background:#d6ece9;border-color:#c3e0dc}
+body.fmmode .seg button.on{box-shadow:0 1px 3px rgba(0,110,100,.3)}
 [hidden]{display:none !important}
-.ver{position:absolute;right:6px;top:calc(env(safe-area-inset-top) + 2px);
+.ver{position:absolute;right:14px;top:calc(env(safe-area-inset-top) + 50px);
   font-size:.58rem;color:rgba(255,255,255,.6);font-weight:700;letter-spacing:.02em}
 .tabbadge{
   display:inline-block;margin-left:5px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;
@@ -450,9 +450,10 @@ body.lsmode{padding-bottom:0;overflow:hidden}
     <button data-site="pricetar" class="on">プライスター</button>
     <button data-site="furimaru">フリマル<span class="tabbadge" id="fmTabBadge" hidden>0</span></button>
   </div>
-  <div class="fmseg" id="fmSeg" hidden><button data-site="furimaru" class="on">値下げ</button><button data-site="listing">出品</button></div>
-  <div class="ver">v30.20</div>
+  <div class="ver">v30.21</div>
 </header>
+<!-- フリマルの中の「値下げ｜出品」。ヘッダーの外に置いて、プライスターの「すべて｜コレクター｜中古」と同じ段・同じ形にする（2026-11-27 納豆さん「切り替えると段が変わる」） -->
+<div class="segwrap" id="fmSeg" hidden><div class="seg"><button data-site="furimaru" class="on">値下げ</button><button data-site="listing">出品</button></div></div>
 
 <div id="ptPane">
 <div class="controls" id="controls" hidden>
@@ -2585,7 +2586,7 @@ new IntersectionObserver(function(entries){
 /* ================= 出品タブ =================
  * 中身は ./shuppin/（出品アプリ）を iframe で映しているだけ。出品のコードはここには置かない */
 function lsFit(){
-  var h = document.querySelector('header').offsetHeight;
+  var h = document.querySelector('header').offsetHeight + ($('fmSeg').hidden ? 0 : $('fmSeg').offsetHeight);
   $('lsPane').style.height = 'calc(100dvh - ' + h + 'px)';
 }
 window.addEventListener('resize', lsFit);

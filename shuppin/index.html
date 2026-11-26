@@ -86,7 +86,7 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 .lsbtn:active{transform:scale(.98)}
 .lsbtn.main{background:var(--pink);color:#fff;min-height:52px;font-size:1rem;margin-top:20px}
 .lsbtn.sub{border-color:var(--line);color:var(--text2)}
-.lsnote{margin-top:6px;font-size:.82rem;color:var(--text2);line-height:1.5}
+.lsreadnote{margin-top:6px;font-size:.82rem;color:var(--text2);line-height:1.5}
 .lsbtn.warn{border-color:#e0a8a4;color:var(--red)}
 .lsbtn:disabled{opacity:.45}
 .photogrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
@@ -142,6 +142,9 @@ select.lsinput{appearance:none;background-image:linear-gradient(45deg,transparen
 .qbar.ng{background:#fff3f2;color:var(--red);border:1.5px solid #e0a8a4}
 .lsver{font-size:.68rem;color:var(--text3);text-align:center;margin-top:18px}
 /* 値下げスターの「出品」タブに埋め込まれている時：自前のタイトル帯は出さない（帯＝裏で出品中の表示だけ残す） */
+/* 値下げスターの中ではフリマルのターコイズに揃える（2026-11-27） */
+html.embed{--bg:#eef8f7;--line:#cfe6e3;--pink:#0daa9f;--pink-deep:#08857c;--pink-pale:#e2f6f4;--text2:#6f8784;--text3:#a9bfbc}
+html.embed .lsnote{background:var(--pink-pale);border-color:#bfe3de}
 html.embed header{background:none;border-bottom:none;padding:0 12px}
 html.embed .hrow{display:none}
 html.embed .qbar{margin:8px 0 0;border:1.5px solid var(--pink)}
@@ -157,7 +160,7 @@ html:not(.embed) #lsOpenStep2{display:none}
 <header>
   <div class="hrow">
     <h1>🛍️ フリマル出品</h1>
-    <div class="ver">v11</div>
+    <div class="ver">v12</div>
   </div>
   <div class="qbar" id="lsQueueBar" hidden></div>
 </header>
@@ -179,9 +182,7 @@ html:not(.embed) #lsOpenStep2{display:none}
 
 <div id="lsPane" hidden>
   <div class="lsbody">
-    <div class="lsnote">写真を選んで内容を書いたら<b>「出品する」だけでアプリから出品まで完結</b>します。<br>
-      出品は<b>裏で進む</b>ので、押したらすぐ次の商品を入力してOKです（結果は上の帯と、下の「最近の出品」に出ます）。<br>
-      送信が済めば<b>アプリを閉じても・他のアプリを開いても出品は続きます</b>（フリマルへの出品はクラウド側が進めます）。</div>
+    <div class="lsnote">「出品する」で裏で進みます。閉じても続きます。</div>
 
     <div class="lssec">
       <div class="lslabel">商品の写真 <span class="lsreq">必須</span><span class="lscount" id="lsPhotoCount"></span></div>
@@ -194,7 +195,7 @@ html:not(.embed) #lsOpenStep2{display:none}
       <div class="lslabel">商品名 <span class="lsreq">必須</span></div>
       <textarea class="lsinput" id="lsName" rows="2" placeholder="例：BLACK TORCH ブラックトーチ (1-5巻) 全5巻セット"></textarea>
       <button class="lsbtn sub" id="lsReadName" style="margin-top:8px">📷 写真から商品名を読む</button>
-      <div class="lsnote" id="lsReadNote" hidden></div>
+      <div class="lsreadnote" id="lsReadNote" hidden></div>
     </div>
 
     <div class="lssec">
